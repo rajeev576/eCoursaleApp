@@ -6,9 +6,9 @@ import '../../core/config.dart';
 import '../../core/providers.dart';
 import '../../data/models/models.dart';
 
-/// Loads the current user from /me/ (also validates the session).
+/// Loads the current user from /me/ (full profile; also validates the session).
 final meProvider = FutureProvider.autoDispose<AppUser?>(
-    (ref) => ref.watch(authRepoProvider).me());
+    (ref) => ref.watch(contentRepoProvider).me());
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -58,10 +58,37 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           Card(
             child: ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit profile'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/profile/edit'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.receipt_long_outlined),
               title: const Text('Order history'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/orders'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.monetization_on_outlined),
+              title: const Text('My Coins'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/coins'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.forum_outlined),
+              title: const Text('Community'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/forum'),
             ),
           ),
           const SizedBox(height: 8),

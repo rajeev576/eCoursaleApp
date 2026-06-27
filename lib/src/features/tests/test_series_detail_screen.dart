@@ -61,11 +61,8 @@ class TestSeriesDetailScreen extends ConsumerWidget {
           const SnackBar(content: Text('This test is not available yet.')));
       return;
     }
-    // The actual exam runs on the proven web test-window (deliberate web handoff).
-    context.push('/handoff', extra: {
-      'next': '/test/${t.uuid}/instructions/',
-      'title': t.title,
-    });
+    // NATIVE test engine (native UI; backend scores). Internal tests = auth_mode false.
+    context.push('/test/${t.uuid}/attempt');
   }
 
   // Native in-app Razorpay checkout for the test series.

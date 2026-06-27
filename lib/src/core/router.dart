@@ -11,10 +11,16 @@ import '../features/courses/comments_screen.dart';
 import '../features/courses/course_detail_screen.dart';
 import '../features/courses/quizzes_screen.dart';
 import '../features/courses/video_player_screen.dart';
+import '../features/forum/forum_screen.dart';
 import '../features/home/home_shell.dart';
+import '../features/live/live_room_screen.dart';
 import '../features/notifications/notifications_screen.dart';
+import '../features/profile/coins_screen.dart';
 import '../features/profile/orders_screen.dart';
+import '../features/profile/profile_edit_screen.dart';
 import '../features/tests/pass_screen.dart';
+import '../features/tests/test_player_screen.dart';
+import '../features/tests/test_result_screen.dart';
 import '../features/tests/test_series_detail_screen.dart';
 import '../features/webview/handoff_screen.dart';
 import 'providers.dart';
@@ -96,6 +102,40 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pass',
         builder: (_, __) => const PassScreen(),
+      ),
+      GoRoute(
+        path: '/test/:uuid/attempt',
+        builder: (_, s) => TestPlayerScreen(
+          testUuid: s.pathParameters['uuid']!,
+          authMode: s.uri.queryParameters['auth_mode'] == 'true',
+        ),
+      ),
+      GoRoute(
+        path: '/test-result/:uuid',
+        builder: (_, s) => TestResultScreen(attemptUuid: s.pathParameters['uuid']!),
+      ),
+      GoRoute(
+        path: '/live/:uuid',
+        builder: (_, s) => LiveRoomScreen(
+          lessonUuid: s.pathParameters['uuid']!,
+          title: (s.extra as Map?)?['title'] as String? ?? 'Live class',
+        ),
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        builder: (_, __) => const ProfileEditScreen(),
+      ),
+      GoRoute(
+        path: '/coins',
+        builder: (_, __) => const CoinsScreen(),
+      ),
+      GoRoute(
+        path: '/forum',
+        builder: (_, __) => const ForumScreen(),
+      ),
+      GoRoute(
+        path: '/forum/:uuid',
+        builder: (_, s) => ForumDetailScreen(uuid: s.pathParameters['uuid']!),
       ),
       GoRoute(
         path: '/bundles',

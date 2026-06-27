@@ -2,17 +2,40 @@
 /// serializers in api/v1/serializers.py on the backend.
 
 class AppUser {
-  AppUser({required this.id, required this.email, required this.fullName, required this.userType});
+  AppUser({
+    required this.id,
+    required this.email,
+    required this.fullName,
+    required this.userType,
+    this.firstName = '',
+    this.lastName = '',
+    this.phone = '',
+    this.bio = '',
+    this.address = '',
+    this.profileImage = '',
+  });
   final int id;
   final String email;
   final String fullName;
   final String userType;
+  final String firstName;
+  final String lastName;
+  final String phone;
+  final String bio;
+  final String address;
+  final String profileImage;
 
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser(
         id: j['id'] as int,
         email: (j['email'] ?? '') as String,
         fullName: (j['full_name'] ?? '') as String,
         userType: (j['user_type'] ?? '') as String,
+        firstName: (j['first_name'] ?? '') as String,
+        lastName: (j['last_name'] ?? '') as String,
+        phone: (j['phone_number'] ?? '') as String,
+        bio: (j['bio'] ?? '') as String,
+        address: (j['comm_address'] ?? '') as String,
+        profileImage: (j['profile_image'] ?? '') as String,
       );
 }
 
@@ -284,16 +307,36 @@ class CartItemModel {
 }
 
 class CartData {
-  CartData({this.items = const [], this.total = '0', this.count = 0});
+  CartData({
+    this.items = const [],
+    this.total = '0',
+    this.count = 0,
+    this.couponCode = '',
+    this.couponDiscount = '0',
+    this.coinsUsed = 0,
+    this.coinsDiscount = '0',
+    this.finalAmount = '0',
+  });
   final List<CartItemModel> items;
-  final String total;
+  final String total;          // gross sum
   final int count;
+  final String couponCode;
+  final String couponDiscount;
+  final int coinsUsed;
+  final String coinsDiscount;
+  final String finalAmount;    // payable after coupon + coins
+
   factory CartData.fromJson(Map<String, dynamic> j) => CartData(
         items: ((j['items'] as List?) ?? [])
             .map((e) => CartItemModel.fromJson(e as Map<String, dynamic>))
             .toList(),
         total: (j['total'] ?? '0').toString(),
         count: (j['count'] ?? 0) as int,
+        couponCode: (j['coupon_code'] ?? '') as String,
+        couponDiscount: (j['coupon_discount'] ?? '0').toString(),
+        coinsUsed: (j['coins_used'] ?? 0) as int,
+        coinsDiscount: (j['coins_discount'] ?? '0').toString(),
+        finalAmount: (j['final'] ?? j['total'] ?? '0').toString(),
       );
 }
 
@@ -407,47 +450,55 @@ class Invoice {
   factory Invoice.fromJson(Map<String, dynamic> j) => Invoice(j);
 }
 
+/// One line item within a grouped order.
+class OrderLine {
+  OrderLine({required this.title, this.itemType = '', this.pricePaid = '0'});
+  final String title;
+  final String itemType;
+  final String pricePaid;
+  factory OrderLine.fromJson(Map<String, dynamic> j) => OrderLine(
+        title: (j['item_title'] ?? 'Item') as String,
+        itemType: (j['item_type'] ?? '') as String,
+        pricePaid: (j['price_paid'] ?? '0').toString(),
+      );
+}
+
+/// A grouped order (one payment) with N line items + one combined invoice.
 class Order {
   Order({
-    required this.uuid,
-    required this.itemTitle,
-    this.itemType = 'other',
-    this.status = '',
-    this.paymentStatus = false,
-    this.pricePaid,
-    this.paymentDate,
-    this.enrollmentDate,
-    this.validTill,
+    required this.orderId,
+    this.date,
+    this.itemCount = 1,
+    this.totalPaid = '0',
+    this.items = const [],
     this.invoice,
-    this.payUrl = '',
   });
 
-  final String uuid;
-  final String itemTitle;
-  final String itemType;
-  final String status;
-  final bool paymentStatus;
-  final String? pricePaid;
-  final String? paymentDate;
-  final String? enrollmentDate;
-  final String? validTill;
+  final String orderId;
+  final String? date;
+  final int itemCount;
+  final String totalPaid;
+  final List<OrderLine> items;
   final Invoice? invoice;
-  final String payUrl;
+
+  /// Headline title: the first item, "+N more" if grouped.
+  String get title {
+    if (items.isEmpty) return 'Order';
+    if (items.length == 1) return items.first.title;
+    return '${items.first.title} + ${items.length - 1} more';
+  }
 
   factory Order.fromJson(Map<String, dynamic> j) => Order(
-        uuid: j['uuid'] as String,
-        itemTitle: (j['item_title'] ?? 'Purchase') as String,
-        itemType: (j['item_type'] ?? 'other') as String,
-        status: (j['status'] ?? '') as String,
-        paymentStatus: (j['payment_status'] ?? false) as bool,
-        pricePaid: j['price_paid']?.toString(),
-        paymentDate: j['payment_date']?.toString(),
-        enrollmentDate: j['enrollment_date']?.toString(),
-        validTill: j['valid_till']?.toString(),
+        orderId: (j['order_id'] ?? '') as String,
+        date: j['date']?.toString(),
+        itemCount: (j['item_count'] ?? 1) as int,
+        totalPaid: (j['total_paid'] ?? '0').toString(),
+        items: ((j['items'] as List?) ?? [])
+            .map((e) => OrderLine.fromJson(Map<String, dynamic>.from(e)))
+            .toList(),
         invoice: j['invoice'] is Map
             ? Invoice.fromJson(Map<String, dynamic>.from(j['invoice'] as Map))
             : null,
-        payUrl: (j['pay_url'] ?? '') as String,
       );
 }
 

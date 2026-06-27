@@ -35,6 +35,15 @@ final homeProvider = FutureProvider.autoDispose<HomeData>(
 final cartProvider = FutureProvider.autoDispose<CartData>(
     (ref) => ref.watch(contentRepoProvider).cart());
 
+final coinsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+    (ref) => ref.watch(contentRepoProvider).coins());
+
+final forumProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+    (ref) => ref.watch(contentRepoProvider).forumList());
+
+final forumDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+    (ref, uuid) => ref.watch(contentRepoProvider).forumDetail(uuid));
+
 // ── Content lists ────────────────────────────────────────────────────────────
 final coursesProvider = FutureProvider.autoDispose<List<Course>>(
     (ref) => ref.watch(contentRepoProvider).courses());

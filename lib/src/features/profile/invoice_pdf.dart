@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -73,23 +72,34 @@ class InvoicePdf {
               if (g('payment_gateway').isNotEmpty) row('Payment via', g('payment_gateway')),
 
               pw.SizedBox(height: 18),
-              pw.Text('Item', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 6),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey300),
-                  borderRadius: pw.BorderRadius.circular(6),
-                ),
-                child: pw.Text(g('item_title')),
+              // Line items (one row per product in the order).
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1)},
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    children: [
+                      _cell('Item', bold: true),
+                      _cell('Amount', bold: true, alignRight: true),
+                    ],
+                  ),
+                  ...(_lines(data)).map((ln) {
+                    final m = Map<String, dynamic>.from(ln);
+                    return pw.TableRow(children: [
+                      _cell((m['title'] ?? '').toString()),
+                      _cell(_money((m['paid'] ?? '0').toString()), alignRight: true),
+                    ]);
+                  }),
+                ],
               ),
 
-              pw.SizedBox(height: 18),
-              row('Price', _money(g('gross_amount'))),
-              if ((double.tryParse(g('coupon_discount')) ?? 0) > 0)
-                row('Coupon${g('coupon_code').isNotEmpty ? ' (${g('coupon_code')})' : ''}', '- ${_money(g('coupon_discount'))}'),
-              if ((double.tryParse(g('coins_discount')) ?? 0) > 0)
-                row('Coins (${g('coins_used')})', '- ${_money(g('coins_discount'))}'),
+              pw.SizedBox(height: 14),
+              row('Subtotal', _money(g('gross_total'))),
+              if ((double.tryParse(g('coupon_total')) ?? 0) > 0)
+                row('Coupon${g('coupon_code').isNotEmpty ? ' (${g('coupon_code')})' : ''}', '- ${_money(g('coupon_total'))}'),
+              if ((double.tryParse(g('coins_total')) ?? 0) > 0)
+                row('Coins discount', '- ${_money(g('coins_total'))}'),
               pw.Divider(),
               row('Amount Paid', _money(g('amount_paid')), bold: true),
 
@@ -107,6 +117,18 @@ class InvoicePdf {
     final bytes = await doc.save();
     await Printing.sharePdf(bytes: bytes, filename: '${g('invoice_no').isEmpty ? 'invoice' : g('invoice_no')}.pdf');
   }
+
+  static List _lines(Map<String, dynamic> data) {
+    final l = data['lines'];
+    return l is List ? l : const [];
+  }
+
+  static pw.Widget _cell(String text, {bool bold = false, bool alignRight = false}) => pw.Padding(
+        padding: const pw.EdgeInsets.all(8),
+        child: pw.Text(text,
+            textAlign: alignRight ? pw.TextAlign.right : pw.TextAlign.left,
+            style: pw.TextStyle(fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, fontSize: 11)),
+      );
 
   static String _fmtDate(String iso) {
     final d = DateTime.tryParse(iso);

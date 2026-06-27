@@ -61,7 +61,7 @@ class CartScreen extends ConsumerWidget {
         ),
       ),
       bottomNavigationBar: cart.maybeWhen(
-        data: (c) => c.items.isEmpty ? null : _checkoutBar(context, c),
+        data: (c) => c.items.isEmpty ? null : _checkoutBar(context, ref, c),
         orElse: () => null,
       ),
     );
@@ -76,35 +76,99 @@ class CartScreen extends ConsumerWidget {
     }
   }
 
-  Widget _checkoutBar(BuildContext context, CartData c) {
+  Widget _checkoutBar(BuildContext context, WidgetRef ref, CartData c) {
+    final hasCoupon = c.couponCode.isNotEmpty;
+    final hasCoins = c.coinsUsed > 0;
     return SafeArea(
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
         decoration: BoxDecoration(color: Colors.white, boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2)),
         ]),
-        child: Row(children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Total (${c.count} item${c.count == 1 ? '' : 's'})',
-                    style: const TextStyle(color: Colors.black54, fontSize: 12)),
-                Text('₹${c.total}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Coupon + coins row
+          Row(children: [
+            TextButton.icon(
+              icon: Icon(hasCoupon ? Icons.check_circle : Icons.local_offer_outlined, size: 16,
+                  color: hasCoupon ? Colors.green : null),
+              label: Text(hasCoupon ? 'Coupon ${c.couponCode}' : 'Apply coupon'),
+              onPressed: () => _couponDialog(context, ref, hasCoupon),
             ),
-          ),
-          Consumer(builder: (context, ref, _) => FilledButton.icon(
-                icon: const Icon(Icons.lock_outline, size: 18),
-                label: const Text('Checkout'),
-                // Combined payment via the NATIVE Razorpay sheet (in-app, one order
-                // for the whole cart).
-                onPressed: () => NativeCheckout(ref).buyCart(context),
-              )),
+            const Spacer(),
+            Row(children: [
+              const Text('Use coins', style: TextStyle(fontSize: 13)),
+              Switch(
+                value: hasCoins,
+                onChanged: (v) async {
+                  await ref.read(contentRepoProvider).cartCoins(v);
+                  ref.invalidate(cartProvider);
+                },
+              ),
+            ]),
+          ]),
+          // Breakdown
+          if (hasCoupon || hasCoins) ...[
+            _line('Subtotal', '₹${c.total}'),
+            if (hasCoupon) _line('Coupon (${c.couponCode})', '- ₹${c.couponDiscount}', green: true),
+            if (hasCoins) _line('Coins', '- ₹${c.coinsDiscount}', green: true),
+          ],
+          const SizedBox(height: 6),
+          Row(children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Payable (${c.count} item${c.count == 1 ? '' : 's'})',
+                      style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                  Text('₹${c.finalAmount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: const Text('Checkout'),
+              onPressed: () => NativeCheckout(ref).buyCart(context),
+            ),
+          ]),
         ]),
       ),
     );
+  }
+
+  Widget _line(String label, String value, {bool green = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          Text(value, style: TextStyle(fontSize: 12, color: green ? Colors.green : Colors.black87)),
+        ]),
+      );
+
+  Future<void> _couponDialog(BuildContext context, WidgetRef ref, bool hasCoupon) async {
+    final ctrl = TextEditingController();
+    final action = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Apply coupon'),
+        content: TextField(controller: ctrl, textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(hintText: 'Coupon code', border: OutlineInputBorder())),
+        actions: [
+          if (hasCoupon) TextButton(onPressed: () => Navigator.pop(context, 'remove'), child: const Text('Remove')),
+          TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, 'apply'), child: const Text('Apply')),
+        ],
+      ),
+    );
+    if (action == null) return;
+    try {
+      await ref.read(contentRepoProvider).cartCoupon(action == 'remove' ? '' : ctrl.text.trim());
+      ref.invalidate(cartProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().contains('detail') ? 'Invalid coupon.' : 'Could not apply coupon.')));
+      }
+    }
   }
 }
 

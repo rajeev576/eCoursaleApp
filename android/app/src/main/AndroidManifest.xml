@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Network access for the API, signed video (Bunny HLS) and the in-app webview. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- LiveKit live classes (students can also raise hand / speak if host allows). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
     <application
         android:label="ecoursale_app"
         android:name="${applicationName}"

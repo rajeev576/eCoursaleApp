@@ -31,7 +31,7 @@ class TestsScreen extends ConsumerWidget {
           title: const Text('Tests'),
           bottom: const TabBar(tabs: [
             Tab(text: 'Test Series'),
-            Tab(text: 'External Exams'),
+            Tab(text: 'Exams (PASS)'),
           ]),
         ),
         body: const TabBarView(children: [

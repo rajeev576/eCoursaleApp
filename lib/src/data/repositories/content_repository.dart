@@ -8,6 +8,16 @@ class ContentRepository {
   ContentRepository(this._client);
   final ApiClient _client;
 
+  Future<AppUser> me() async {
+    final res = await _client.raw.get('/me/');
+    return AppUser.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<AppUser> updateProfile(Map<String, dynamic> fields) async {
+    final res = await _client.raw.patch('/me/', data: fields);
+    return AppUser.fromJson(res.data as Map<String, dynamic>);
+  }
+
   Future<SchoolConfig> schoolConfig() async {
     final res = await _client.raw.get('/school/config/');
     return SchoolConfig.fromJson(res.data as Map<String, dynamic>);
@@ -74,6 +84,86 @@ class ContentRepository {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  // ── Native live class ──
+  Future<Map<String, dynamic>> liveToken(String lessonUuid) async {
+    final res = await _client.raw.post('/live/token/', data: {'lesson_uuid': lessonUuid});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> liveChatHistory(String lessonUuid) async {
+    final res = await _client.raw.get('/live/$lessonUuid/chat/');
+    final data = res.data;
+    final list = (data is Map ? (data['messages'] ?? data['results'] ?? []) : data) as List? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<void> liveChatSend(String lessonUuid, String message) async {
+    await _client.raw.post('/live/$lessonUuid/chat/save/', data: {'message': message});
+  }
+
+  // ── Native test engine ──
+  Future<Map<String, dynamic>> testPaper(String uuid, {bool authMode = false}) async {
+    final res = await _client.raw.get('/tests/$uuid/attempt/',
+        queryParameters: {'auth_mode': authMode ? 'true' : 'false'});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<String?> createAttempt(String testUuid, {bool authMode = false, bool fresh = false}) async {
+    final res = await _client.raw.post('/tests/attempt/create/', data: {
+      'test_id': testUuid, 'auth_mode': authMode ? 'true' : 'false',
+      'fresh_start': fresh ? 'true' : 'false',
+    });
+    final d = Map<String, dynamic>.from(res.data as Map);
+    return (d['attempt_id'] ?? d['attempt'] ?? d['attempt_uuid'])?.toString();
+  }
+
+  Future<void> saveAnswers(String attemptId, Map<String, dynamic> answers, {bool authMode = false}) async {
+    await _client.raw.post('/tests/attempt/save/', data: {
+      'attempt_id': attemptId, 'answers': answers, 'auth_mode': authMode ? 'true' : 'false',
+    });
+  }
+
+  Future<Map<String, dynamic>> submitTest(String attemptId, {bool authMode = false}) async {
+    final res = await _client.raw.post('/tests/attempt/submit/', data: {
+      'attempt_id': attemptId, 'auth_mode': authMode ? 'true' : 'false',
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> testResult(String attemptUuid) async {
+    final res = await _client.raw.get('/tests/result/$attemptUuid/');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  // ── Forum ──
+  Future<Map<String, dynamic>> forumList({int page = 1}) async {
+    final res = await _client.raw.get('/forum/', queryParameters: {'page': page});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> forumDetail(String uuid) async {
+    final res = await _client.raw.get('/forum/$uuid/');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> forumAsk(String title, String body, String tags) async {
+    await _client.raw.post('/forum/', data: {'title': title, 'body': body, 'tags': tags});
+  }
+
+  Future<void> forumAnswer(String questionUuid, String body) async {
+    await _client.raw.post('/forum/$questionUuid/', data: {'body': body});
+  }
+
+  Future<int> forumVote(String target, String uuid, int value) async {
+    final res = await _client.raw.post('/forum/vote/', data: {'target': target, 'uuid': uuid, 'value': value});
+    return (res.data['votes'] ?? 0) as int;
+  }
+
+  Future<Map<String, dynamic>> coins({int page = 1}) async {
+    final res = await _client.raw.get('/coins/', queryParameters: {'page': page});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<AppNotification>> notifications({int page = 1}) async {
     final res = await _client.raw.get('/notifications/', queryParameters: {'page': page});
     return _results(res.data).map((e) => AppNotification.fromJson(e)).toList();
@@ -132,6 +222,16 @@ class ContentRepository {
 
   Future<CartData> cartRemove(int id) async {
     final res = await _client.raw.post('/cart/remove/', data: {'id': id});
+    return CartData.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<CartData> cartCoupon(String code) async {
+    final res = await _client.raw.post('/cart/coupon/', data: {'code': code});
+    return CartData.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<CartData> cartCoins(bool use) async {
+    final res = await _client.raw.post('/cart/coins/', data: {'use': use});
     return CartData.fromJson(res.data as Map<String, dynamic>);
   }
 

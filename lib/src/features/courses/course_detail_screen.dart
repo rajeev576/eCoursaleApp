@@ -153,14 +153,8 @@ class CourseDetailScreen extends ConsumerWidget {
     // via handoff. Rebuilding the live room natively is a large tradeoff; the web
     // page already does video + chat + polls correctly.
     if (l.lessonType == 'live') {
-      if (l.categoryUuid.isEmpty) {
-        _snack(context, 'Live class not available.');
-        return;
-      }
-      context.push('/handoff', extra: {
-        'next': '/watch/${l.categoryUuid}/lesson/${l.uuid}/',
-        'title': l.title,
-      });
+      // NATIVE live room (LiveKit + chat). Joins the same room as the web.
+      context.push('/live/${l.uuid}', extra: {'title': l.title});
       return;
     }
     // Recorded video → in-app native player (Bunny embed). PDF/other → resource.

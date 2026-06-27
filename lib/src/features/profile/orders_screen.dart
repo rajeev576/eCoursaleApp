@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/widgets/async_view.dart';
 import '../../data/models/models.dart';
 import 'invoice_pdf.dart';
 
+/// Order history — GROUPED by order (a cart purchase = one order with N line items
+/// + one combined invoice). A single Buy Now = a 1-item order.
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
 
@@ -30,56 +31,58 @@ class OrdersScreen extends ConsumerWidget {
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
             final o = list[i];
-            final paid = o.paymentStatus;
+            final multi = o.items.length > 1;
+            final leading = CircleAvatar(
+              backgroundColor: Colors.green.withOpacity(0.12),
+              child: Icon(multi ? Icons.shopping_bag_outlined : _iconFor(
+                  o.items.isNotEmpty ? o.items.first.itemType : ''), color: Colors.green),
+            );
+            final titleW = Text(o.title, maxLines: 2, overflow: TextOverflow.ellipsis);
+            final subtitleW = Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                [
+                  if (multi) '${o.itemCount} items',
+                  if (o.date != null) _date(o.date!),
+                ].where((s) => s.isNotEmpty).join(' · '),
+                style: const TextStyle(color: Colors.black54, fontSize: 12),
+              ),
+            );
+            final trailingW = Text('₹${o.totalPaid}', style: const TextStyle(fontWeight: FontWeight.w700));
+
             return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: paid ? Colors.green.withOpacity(0.12) : const Color(0xFFEFF3FB),
-                        child: Icon(_iconFor(o.itemType),
-                            color: paid ? Colors.green : Theme.of(context).colorScheme.primary),
-                      ),
-                      title: Text(o.itemTitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          [
-                            o.itemType.replaceAll('_', ' '),
-                            if (o.paymentDate != null) _date(o.paymentDate!),
-                          ].where((s) => s.isNotEmpty).join(' · '),
-                          style: const TextStyle(color: Colors.black54, fontSize: 12),
-                        ),
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (o.pricePaid != null && o.pricePaid!.isNotEmpty)
-                            Text('₹${o.pricePaid}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text(paid ? 'Paid' : (o.status),
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: paid ? Colors.green : Colors.orange)),
-                        ],
+              child: Column(
+                children: [
+                  // Multi-item → expandable to show line items; single → plain tile.
+                  if (multi)
+                    ExpansionTile(
+                      leading: leading,
+                      title: titleW,
+                      subtitle: subtitleW,
+                      trailing: trailingW,
+                      childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                      children: o.items.map((it) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(_iconFor(it.itemType), size: 20, color: Colors.black45),
+                            title: Text(it.title, style: const TextStyle(fontSize: 14)),
+                            trailing: Text('₹${it.pricePaid}', style: const TextStyle(fontSize: 13)),
+                          )).toList(),
+                    )
+                  else
+                    ListTile(leading: leading, title: titleW, subtitle: subtitleW, trailing: trailingW),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8, bottom: 4),
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.receipt_long, size: 16),
+                        label: const Text('Invoice'),
+                        onPressed: o.invoice == null ? null : () => InvoicePdf.shareForOrder(o),
                       ),
                     ),
-                    // Order history is paid-only → native invoice PDF (web replica).
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8, bottom: 4),
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.receipt_long, size: 16),
-                          label: const Text('Invoice'),
-                          onPressed: o.invoice == null ? null : () => InvoicePdf.shareForOrder(o),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             );
           },
