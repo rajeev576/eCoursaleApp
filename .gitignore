@@ -1,0 +1,35 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock           # app (not package) — but keep if you prefer reproducible builds
+*.iml
+.idea/
+.vscode/
+
+# Env / secrets — never commit real api_base overrides or signing material
+.env
+.env.local
+*.keystore
+*.jks
+key.properties
+android/key.properties
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/release/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
