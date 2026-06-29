@@ -25,32 +25,44 @@ class AsyncView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return value.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) {
-        final expired = e is SessionExpired;
-        return _Message(
-          icon: expired ? Icons.lock_clock : Icons.wifi_off,
-          title: expired ? 'Session expired' : 'Couldn’t load',
-          subtitle: expired
-              ? 'Please sign in again.'
-              : 'Check your connection and try again.',
-          onRetry: onRefresh,
-        );
-      },
-      data: (data) {
-        if (isEmpty?.call(data) ?? false) {
-          return RefreshIndicator(
-            onRefresh: onRefresh,
-            child: ListView(children: [
-              SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-              _Message(icon: emptyIcon, title: emptyMessage, onRetry: onRefresh),
-            ]),
-          );
+    // Show CACHED data while a refresh is in flight — only the very first load
+    // (no value yet) shows a spinner. This makes returning to a tab / pulling to
+    // refresh feel instant instead of flashing a full-screen loader every time.
+    if (value.hasValue) {
+      final data = value.requireValue;
+      if (isEmpty?.call(data) ?? false) {
+        // Empty + still loading on first fetch → spinner, not the empty message.
+        if (value.isLoading) {
+          return const Center(child: CircularProgressIndicator());
         }
-        return RefreshIndicator(onRefresh: onRefresh, child: builder(context, data));
-      },
-    );
+        // EMPTY is NOT an error — show the message WITHOUT a Retry button (a
+        // retry on a legitimately-empty list reads like a load failure). Pull-to-
+        // refresh is still available by dragging the list.
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: ListView(children: [
+            SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+            _Message(icon: emptyIcon, title: emptyMessage),
+          ]),
+        );
+      }
+      return RefreshIndicator(onRefresh: onRefresh, child: builder(context, data));
+    }
+
+    // No cached value yet: first-ever load, or an error before any data arrived.
+    if (value.hasError) {
+      final e = value.error!;
+      final expired = e is SessionExpired;
+      return _Message(
+        icon: expired ? Icons.lock_clock : Icons.wifi_off,
+        title: expired ? 'Session expired' : 'Couldn’t load',
+        subtitle: expired
+            ? 'Please sign in again.'
+            : 'Check your connection and try again.',
+        onRetry: onRefresh,
+      );
+    }
+    return const Center(child: CircularProgressIndicator());
   }
 }
 
@@ -63,18 +75,22 @@ class _Message extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: Colors.black26),
+            Icon(icon, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
             const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: cs.onSurface)),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
-              Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
+              Text(subtitle!, textAlign: TextAlign.center,
+                  style: TextStyle(color: cs.onSurfaceVariant)),
             ],
             if (onRetry != null) ...[
               const SizedBox(height: 16),

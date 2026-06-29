@@ -8,6 +8,33 @@ import 'token_store.dart';
 /// Thrown when the session is gone (refresh failed) — the UI routes to login.
 class SessionExpired implements Exception {}
 
+/// Turn any error (especially a DioException) into a clean, user-facing message.
+/// Prefers the server's own `error`/`detail`/`message` field so the student sees
+/// "Access denied" / "You already own this", never a raw "DioException [bad response]".
+String apiErrorMessage(Object e, {String fallback = 'Something went wrong. Please try again.'}) {
+  if (e is SessionExpired) return 'Your session expired. Please sign in again.';
+  if (e is DioException) {
+    final data = e.response?.data;
+    if (data is Map) {
+      for (final k in const ['error', 'detail', 'message']) {
+        final v = data[k];
+        if (v is String && v.trim().isNotEmpty) return v;
+      }
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.connectionError:
+        return 'Network problem. Check your connection and try again.';
+      default:
+        break;
+    }
+  }
+  final s = e.toString().replaceAll('Exception: ', '');
+  return s.contains('DioException') ? fallback : s;
+}
+
 /// Single Dio instance for the whole app.
 ///
 /// Interceptor responsibilities:

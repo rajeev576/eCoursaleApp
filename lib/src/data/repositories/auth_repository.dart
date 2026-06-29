@@ -42,6 +42,27 @@ class AuthRepository {
     }
   }
 
+  /// Exchange a Google ID token (from the native google_sign_in flow) for the
+  /// app's JWT pair. The backend verifies the token with Google, then logs in
+  /// (or creates) the matching student. Same result shape as password login.
+  Future<LoginResult> loginWithGoogle(String idToken) async {
+    try {
+      final res = await Dio(BaseOptions(baseUrl: AppConfig.apiV1)).post(
+        '/auth/google/',
+        data: {'id_token': idToken},
+      );
+      final data = res.data as Map<String, dynamic>;
+      await _tokens.save(access: data['access'] as String, refresh: data['refresh'] as String);
+      return LoginResult(
+        user: data['user'] != null ? AppUser.fromJson(data['user'] as Map<String, dynamic>) : null,
+        schoolName: (data['school']?['name'] ?? '') as String,
+      );
+    } on DioException catch (e) {
+      throw AuthException((e.response?.data is Map ? e.response?.data['detail'] : null) ??
+          'Google sign-in failed. Please try again.');
+    }
+  }
+
   /// Whether phone-OTP signup is available (SMS configured). When false the app
   /// shows the direct email/password signup form.
   Future<bool> signupOtpEnabled() async {

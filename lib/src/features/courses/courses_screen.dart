@@ -68,10 +68,12 @@ class _CourseCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.menu_book_outlined, size: 15, color: Colors.black45),
+                      Icon(Icons.menu_book_outlined, size: 15,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant),
                       const SizedBox(width: 4),
                       Text('${course.totalLessons} lessons',
-                          style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                       const Spacer(),
                       if (course.isEnrolled)
                         const _Badge(text: 'Enrolled', color: Colors.green)

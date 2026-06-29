@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher / app name. For the white-label Phase-E flavors this is overridden
+         per school (each flavor's res/values/strings.xml). The default below is the
+         platform school, MindSpan. -->
+    <string name="app_name">MindSpan</string>
+</resources>

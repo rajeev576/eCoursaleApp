@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/widgets/async_view.dart';
+import '../../core/widgets/price_text.dart';
 import '../../data/models/models.dart';
 
 class BundlesScreen extends ConsumerWidget {
@@ -68,13 +69,16 @@ class _BundleCard extends StatelessWidget {
                   Row(
                     children: [
                       if (!bundle.isFree)
-                        Text('₹${bundle.price}',
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
-                      if (!bundle.isFree && double.tryParse(bundle.savings) != null &&
-                          double.parse(bundle.savings) > 0) ...[
+                        // Worth (total_value) struck + discounted price — same basis
+                        // as the bundle detail, so it reconciles with "Save ₹savings".
+                        PriceText(
+                          price: bundle.totalValue, finalPrice: bundle.finalPrice,
+                          discountActive: true, isFree: bundle.isFree,
+                          size: 15),
+                      if (!bundle.isFree && (double.tryParse(bundle.savings) ?? 0) > 0) ...[
                         const SizedBox(width: 8),
                         Text('Save ₹${bundle.savings}',
-                            style: const TextStyle(color: Colors.green, fontSize: 12)),
+                            style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
                       ],
                       const Spacer(),
                       if (bundle.isEnrolled)

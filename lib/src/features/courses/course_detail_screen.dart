@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/html_text.dart';
 import '../../core/providers.dart';
 import '../../core/widgets/async_view.dart';
+import '../../core/widgets/price_text.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/content_repository.dart';
 import '../cart/cart_screen.dart' show addToCart;
@@ -32,12 +33,8 @@ class CourseDetailScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Quizzes',
             icon: const Icon(Icons.quiz_outlined),
-            // The web quiz page is per-COURSE (/quiz/<course_uuid>/) and lists all
-            // the course's quizzes; open it via the authenticated handoff.
-            onPressed: () => context.push('/handoff', extra: {
-              'next': '/quiz/$uuid/',
-              'title': 'Quizzes',
-            }),
+            // NATIVE quizzes list for the course; each quiz opens the native player.
+            onPressed: () => context.push('/course/$uuid/quizzes'),
           ),
         ],
       ),
@@ -51,16 +48,19 @@ class CourseDetailScreen extends ConsumerWidget {
           await ref.read(courseLessonsProvider(uuid).future);
         },
         builder: (context, cl) => ListView.separated(
-          padding: const EdgeInsets.all(16),
+          // Bottom inset so the last lesson clears the Enroll bar + system nav bar.
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 90 + MediaQuery.of(context).padding.bottom),
           itemCount: cl.lessons.length,
           separatorBuilder: (_, __) => const Divider(height: 1),
           itemBuilder: (_, i) {
             final l = cl.lessons[i];
-            final locked = !cl.isEnrolled && !l.isFree;
+            // Authoritative from the backend (handles course/category/lesson-free).
+            final locked = l.locked;
+            final cs = Theme.of(context).colorScheme;
             final leading = CircleAvatar(
-              backgroundColor: const Color(0xFFEFF3FB),
-              child: Icon(_iconFor(l.lessonType),
-                  color: locked ? Colors.black26 : Theme.of(context).colorScheme.primary),
+              backgroundColor: cs.primary.withValues(alpha: 0.10),
+              child: Icon(locked ? Icons.lock_outline : _iconFor(l.lessonType),
+                  color: locked ? cs.onSurfaceVariant : cs.primary),
             );
 
             // Lessons with attachments expand to show them natively; otherwise a
@@ -68,10 +68,10 @@ class CourseDetailScreen extends ConsumerWidget {
             if (!locked && l.attachments.isNotEmpty) {
               return ExpansionTile(
                 leading: leading,
-                title: Text(l.title),
+                title: _titleWithFree(l),
                 subtitle: Text(
                   '${l.duration > 0 ? '${l.duration} min · ' : ''}${l.attachments.length} attachment${l.attachments.length == 1 ? '' : 's'}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 childrenPadding: const EdgeInsets.only(left: 16, right: 8, bottom: 8),
                 children: [
@@ -100,17 +100,17 @@ class CourseDetailScreen extends ConsumerWidget {
 
             return ListTile(
               leading: leading,
-              title: Text(l.title,
-                  style: TextStyle(color: locked ? Colors.black45 : null)),
+              title: _titleWithFree(l, locked: locked, context: context),
               subtitle: l.duration > 0 ? Text('${l.duration} min') : null,
               trailing: locked
-                  ? const Icon(Icons.lock_outline, size: 18, color: Colors.black38)
+                  ? Icon(Icons.lock_outline, size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)
                   : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                          color: Colors.black45,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           tooltip: 'Discussion',
                           onPressed: () => _openDiscussion(context, l),
                         ),
@@ -142,10 +142,29 @@ class CourseDetailScreen extends ConsumerWidget {
       return;
     }
     if (a.fileUrl.isNotEmpty) {
-      _open(context, a.fileUrl);
+      // PDFs open in the in-app native viewer (student stays in the app, signed
+      // URL not handed to an external app). Other file types fall back to the OS.
+      if (_isPdf(a)) {
+        context.push('/pdf', extra: {
+          'url': a.fileUrl,
+          'title': a.title,
+          'allowDownload': a.allowDownload, // admin opt-in only
+        });
+      } else if (a.allowDownload) {
+        _open(context, a.fileUrl);
+      } else {
+        _snack(context, 'This file is view-only.');
+      }
       return;
     }
     _snack(context, 'This attachment has no file.');
+  }
+
+  bool _isPdf(Attachment a) {
+    if (a.type.toLowerCase() == 'pdf') return true;
+    final u = a.fileUrl.toLowerCase();
+    final clean = u.split('?').first; // strip signed-URL query
+    return clean.endsWith('.pdf');
   }
 
   void _openLesson(BuildContext context, Lesson l) {
@@ -163,7 +182,13 @@ class CourseDetailScreen extends ConsumerWidget {
       return;
     }
     if (l.resourceUrl.isNotEmpty) {
-      _open(context, l.resourceUrl);
+      // A PDF/document lesson opens in the in-app viewer; anything else via the OS.
+      final clean = l.resourceUrl.toLowerCase().split('?').first;
+      if (l.lessonType == 'pdf' || clean.endsWith('.pdf')) {
+        context.push('/pdf', extra: {'url': l.resourceUrl, 'title': l.title});
+      } else {
+        _open(context, l.resourceUrl);
+      }
       return;
     }
     if (l.playbackUrl.isNotEmpty) {
@@ -171,6 +196,24 @@ class CourseDetailScreen extends ConsumerWidget {
       return;
     }
     _snack(context, 'No media for this lesson.');
+  }
+
+  /// Lesson title with a small green FREE badge when the lesson is free — so the
+  /// student can see (like the web) which lessons are open without enrolling.
+  Widget _titleWithFree(Lesson l, {bool locked = false, BuildContext? context}) {
+    // Locked lessons are DIMMED (reduced-opacity onSurface) so they read correctly
+    // in both light and dark — not a fixed black that vanishes on a dark background.
+    final dimColor = context != null
+        ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)
+        : null;
+    final title = Expanded(
+      child: Text(l.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: locked ? dimColor : null)),
+    );
+    if (!l.isFree) return Row(children: [title]);
+    return Row(children: [title, const SizedBox(width: 6), const _FreeBadge()]);
   }
 
   IconData _iconFor(String type) {
@@ -194,6 +237,23 @@ class CourseDetailScreen extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 }
 
+/// Small green FREE pill — matches the web's free indicator.
+class _FreeBadge extends StatelessWidget {
+  const _FreeBadge();
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text('FREE',
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w800,
+                color: Colors.green.shade700, letterSpacing: 0.4)),
+      );
+}
+
 class _AttachmentTile extends StatelessWidget {
   const _AttachmentTile({required this.attachment, required this.onOpen});
   final Attachment attachment;
@@ -212,13 +272,21 @@ class _AttachmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // PDFs/content open IN-APP (chevron); only admin-downloadable files imply
+    // leaving the app (open_in_new).
+    final isPdf = attachment.type.toLowerCase() == 'pdf' ||
+        attachment.fileUrl.toLowerCase().split('?').first.endsWith('.pdf');
+    final opensInApp = attachment.isContent || isPdf;
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-      leading: Icon(_icon(), size: 20, color: Theme.of(context).colorScheme.primary),
+      leading: Icon(_icon(), size: 20, color: cs.primary),
       title: Text(attachment.title, style: const TextStyle(fontSize: 14)),
-      trailing: Icon(
-          attachment.isContent ? Icons.chevron_right : Icons.open_in_new, size: 18),
+      subtitle: !attachment.isContent && !attachment.allowDownload
+          ? Text('View only', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant))
+          : null,
+      trailing: Icon(opensInApp ? Icons.chevron_right : Icons.open_in_new, size: 18),
       onTap: onOpen,
     );
   }
@@ -263,8 +331,8 @@ class _BuyBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2))],
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, -2))],
         ),
         child: Row(
           children: [
@@ -273,9 +341,11 @@ class _BuyBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Price', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                  Text('₹${course.price}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text('Price', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                  PriceText(
+                    price: course.price, finalPrice: course.finalPrice,
+                    discountActive: course.discountActive, isFree: course.isFree,
+                    size: 18),
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../../core/providers.dart';
+import '../tests/external_exams_controller.dart';
 
 /// Native in-app Razorpay checkout (Testbook-style). Opens the Razorpay payment
 /// sheet INSIDE the app — no webview, no browser. Money goes to the school's own
@@ -94,10 +95,17 @@ class NativeCheckout {
       Navigator.of(ctx).maybePop();
       _snack(ctx, ok ? 'Payment successful! You are enrolled.' : 'Payment received — confirming. Check My Orders.');
     }
-    // Refresh content so enrolled state updates.
+    // Refresh every surface whose "owned/enrolled" state a purchase can change.
+    // (These lists are now session-cached, so they must be explicitly invalidated
+    // here — otherwise a just-bought item would keep showing its old price/badge.)
     ref.invalidate(cartProvider);
     ref.invalidate(ordersProvider);
     ref.invalidate(coursesProvider);
+    ref.invalidate(testSeriesProvider);
+    ref.invalidate(bundlesProvider);
+    ref.invalidate(externalExamsControllerProvider);
+    ref.invalidate(homeProvider);
+    ref.invalidate(myEnrolledProvider);
     _cleanup();
   }
 

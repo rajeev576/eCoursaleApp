@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/providers.dart';
 
@@ -28,45 +29,62 @@ class ForumScreen extends ConsumerWidget {
               icon: const Icon(Icons.refresh), label: const Text('Retry')),
         ),
         data: (d) {
+          final muted = Theme.of(context).colorScheme.onSurfaceVariant;
           if (d['enabled'] != true) {
-            return const Center(child: Padding(padding: EdgeInsets.all(32),
-                child: Text('Community is not available on this plan.',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.black54))));
+            // Community Q&A off on this plan — still show the school's social links
+            // (admin-configured) so "Community" isn't an empty dead-end.
+            return ListView(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
+              children: [
+                const _SocialLinksBar(),
+                Padding(padding: const EdgeInsets.all(32),
+                  child: Text('Community discussion is not available on this plan.',
+                      textAlign: TextAlign.center, style: TextStyle(color: muted))),
+              ],
+            );
           }
           final List qs = (d['results'] as List?) ?? [];
-          if (qs.isEmpty) {
-            return const Center(child: Text('No questions yet. Be the first to ask!',
-                style: TextStyle(color: Colors.black54)));
-          }
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(forumProvider);
               await ref.read(forumProvider.future);
             },
             child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: qs.length,
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
+              // [0] = social links bar (when configured), then the questions (or an
+              // empty hint when there are none).
+              itemCount: (qs.isEmpty ? 1 : qs.length) + 1,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (_, i) {
-                final q = Map<String, dynamic>.from(qs[i]);
-                return Card(
-                  child: ListTile(
-                    title: Text((q['title'] ?? '') as String,
-                        maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text('${q['votes']} votes · ${q['answers']} answers · ${q['author']}',
-                          style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/forum/${q['uuid']}'),
-                  ),
-                );
+                if (i == 0) return const _SocialLinksBar();
+                if (qs.isEmpty) {
+                  return Padding(padding: const EdgeInsets.only(top: 40),
+                    child: Center(child: Text('No questions yet. Be the first to ask!',
+                        style: TextStyle(color: muted))));
+                }
+                i -= 1;
+                return _buildQuestionItem(context, ref, Map<String, dynamic>.from(qs[i]));
               },
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildQuestionItem(BuildContext context, WidgetRef ref, Map<String, dynamic> q) {
+    return Card(
+      child: ListTile(
+        title: Text((q['title'] ?? '') as String,
+            maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text('${q['votes']} votes · ${q['answers']} answers · ${q['author']}',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/forum/${q['uuid']}'),
       ),
     );
   }
@@ -102,6 +120,68 @@ class ForumScreen extends ConsumerWidget {
         }
       }
     }
+  }
+}
+
+/// Admin-configured social handles for the school, shown at the top of the
+/// Community page (web parity: the student dashboard's "Connect with us"). Only
+/// renders links that are actually set; hides entirely when none are.
+class _SocialLinksBar extends ConsumerWidget {
+  const _SocialLinksBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cfg = ref.watch(schoolConfigProvider).maybeWhen(
+        data: (c) => c, orElse: () => null);
+    if (cfg == null || !cfg.hasSocialLinks) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+
+    final links = <(IconData, String)>[
+      if (cfg.websiteUrl.isNotEmpty) (Icons.language, cfg.websiteUrl),
+      if (cfg.facebookUrl.isNotEmpty) (Icons.facebook, cfg.facebookUrl),
+      if (cfg.instagramUrl.isNotEmpty) (Icons.camera_alt_outlined, cfg.instagramUrl),
+      if (cfg.twitterUrl.isNotEmpty) (Icons.alternate_email, cfg.twitterUrl),
+      if (cfg.linkedinUrl.isNotEmpty) (Icons.work_outline, cfg.linkedinUrl),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Connect with ${cfg.name}',
+            style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 10, runSpacing: 10, children: [
+          for (final (icon, url) in links)
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _open(url),
+              child: Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: cs.outlineVariant),
+                ),
+                child: Icon(icon, color: cs.primary, size: 20),
+              ),
+            ),
+        ]),
+      ]),
+    );
+  }
+
+  Future<void> _open(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {/* ignore */}
   }
 }
 

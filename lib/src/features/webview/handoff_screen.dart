@@ -65,14 +65,16 @@ class _HandoffScreenState extends ConsumerState<HandoffScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-      body: Stack(
-        children: [
-          if (_controller != null) WebViewWidget(controller: _controller!),
-          if (_error != null)
-            Center(child: Text(_error!, style: const TextStyle(color: Colors.black54))),
-          if (_loading && _error == null)
-            const Center(child: CircularProgressIndicator()),
-        ],
+      body: SafeArea(
+        child: Stack(
+          children: [
+            if (_controller != null) WebViewWidget(controller: _controller!),
+            if (_error != null)
+              Center(child: Text(_error!, style: const TextStyle(color: Colors.black54))),
+            if (_loading && _error == null)
+              const Center(child: CircularProgressIndicator()),
+          ],
+        ),
       ),
     );
   }

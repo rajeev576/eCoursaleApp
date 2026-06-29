@@ -10,17 +10,22 @@ import '../features/courses/bundles_screen.dart';
 import '../features/courses/comments_screen.dart';
 import '../features/courses/course_detail_screen.dart';
 import '../features/courses/quizzes_screen.dart';
+import '../features/courses/quiz_player_screen.dart';
 import '../features/courses/video_player_screen.dart';
+import '../features/courses/pdf_viewer_screen.dart';
 import '../features/forum/forum_screen.dart';
 import '../features/home/home_shell.dart';
 import '../features/live/live_room_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/profile/coins_screen.dart';
+import '../features/profile/my_enrolled_screen.dart';
 import '../features/profile/orders_screen.dart';
+import '../features/profile/support_screen.dart';
 import '../features/profile/profile_edit_screen.dart';
 import '../features/tests/pass_screen.dart';
 import '../features/tests/test_player_screen.dart';
 import '../features/tests/test_result_screen.dart';
+import '../features/tests/test_solution_screen.dart';
 import '../features/tests/test_series_detail_screen.dart';
 import '../features/webview/handoff_screen.dart';
 import 'providers.dart';
@@ -35,11 +40,51 @@ class _SessionRefresh extends ChangeNotifier {
 }
 
 /// Shown while the saved session is being read from secure storage on launch.
-class _SplashScreen extends StatelessWidget {
+/// Branded: the school's logo AND name (so app-open isn't a bare spinner / a
+/// logo with no name) — falls back gracefully before the config resolves.
+class _SplashScreen extends ConsumerWidget {
   const _SplashScreen();
   @override
-  Widget build(BuildContext context) =>
-      const Scaffold(body: Center(child: CircularProgressIndicator()));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final config = ref.watch(schoolConfigProvider);
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            config.maybeWhen(
+              data: (c) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (c.logo.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        c.logo, width: 84, height: 84, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (c.name.isNotEmpty)
+                    Text(
+                      c.name,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800, color: cs.primary),
+                    ),
+                ],
+              ),
+              orElse: () => const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 28),
+            CircularProgressIndicator(color: cs.primary),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// App router. Guards routes by session: unauthenticated users are sent to
@@ -88,6 +133,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => QuizzesScreen(courseUuid: s.pathParameters['uuid']!),
       ),
       GoRoute(
+        path: '/quiz/:uuid/play',
+        builder: (_, s) => QuizPlayerScreen(
+          quizUuid: s.pathParameters['uuid']!,
+          title: (s.extra as Map?)?['title'] as String? ?? 'Quiz',
+        ),
+      ),
+      GoRoute(
         path: '/orders',
         builder: (_, __) => const OrdersScreen(),
       ),
@@ -108,11 +160,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => TestPlayerScreen(
           testUuid: s.pathParameters['uuid']!,
           authMode: s.uri.queryParameters['auth_mode'] == 'true',
+          fresh: s.uri.queryParameters['fresh'] == 'true',
         ),
       ),
       GoRoute(
         path: '/test-result/:uuid',
-        builder: (_, s) => TestResultScreen(attemptUuid: s.pathParameters['uuid']!),
+        builder: (_, s) => TestResultScreen(
+          attemptUuid: s.pathParameters['uuid']!,
+          promptReview: s.uri.queryParameters['review'] == '1',
+        ),
+      ),
+      GoRoute(
+        path: '/test-solution/:uuid',
+        builder: (_, s) => TestSolutionScreen(attemptUuid: s.pathParameters['uuid']!),
       ),
       GoRoute(
         path: '/live/:uuid',
@@ -130,6 +190,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const CoinsScreen(),
       ),
       GoRoute(
+        path: '/my-enrolled',
+        builder: (_, __) => const MyEnrolledScreen(),
+      ),
+      GoRoute(
+        path: '/support',
+        builder: (_, __) => const SupportScreen(),
+      ),
+      GoRoute(
         path: '/forum',
         builder: (_, __) => const ForumScreen(),
       ),
@@ -144,6 +212,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/test-series/:uuid',
         builder: (_, s) => TestSeriesDetailScreen(uuid: s.pathParameters['uuid']!),
+      ),
+      GoRoute(
+        // External exam reuses the test-series detail screen (same content shape).
+        path: '/external-exam/:uuid',
+        builder: (_, s) =>
+            TestSeriesDetailScreen(uuid: s.pathParameters['uuid']!, isExternal: true),
       ),
       GoRoute(
         path: '/bundle/:uuid',
@@ -166,6 +240,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           return VideoPlayerScreen(
             url: (m['url'] ?? '') as String,
             title: (m['title'] ?? 'Video') as String,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/pdf',
+        builder: (_, s) {
+          final m = (s.extra as Map?) ?? const {};
+          return PdfViewerScreen(
+            url: (m['url'] ?? '') as String,
+            title: (m['title'] ?? 'Document') as String,
+            allowDownload: (m['allowDownload'] ?? false) as bool,
           );
         },
       ),

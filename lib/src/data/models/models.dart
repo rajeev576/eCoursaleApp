@@ -49,6 +49,8 @@ class Course {
     this.isFree = false,
     this.isEnrolled = false,
     this.price = '0',
+    this.finalPrice = '0',
+    this.discountActive = false,
     this.totalLessons = 0,
     this.totalDuration = 0,
     this.averageRating = 0,
@@ -62,7 +64,9 @@ class Course {
   final String thumbnail;
   final bool isFree;
   final bool isEnrolled;
-  final String price;
+  final String price;          // original (struck through when discounted)
+  final String finalPrice;     // discounted price actually paid (web parity)
+  final bool discountActive;   // whether a discount is live → show strike-through
   final int totalLessons;
   final int totalDuration;
   final double averageRating;
@@ -77,6 +81,8 @@ class Course {
         isFree: (j['is_free'] ?? false) as bool,
         isEnrolled: (j['is_enrolled'] ?? false) as bool,
         price: (j['price'] ?? '0').toString(),
+        finalPrice: (j['final_price'] ?? j['price'] ?? '0').toString(),
+        discountActive: (j['discount_active'] ?? false) as bool,
         totalLessons: (j['total_lessons'] ?? 0) as int,
         totalDuration: (j['total_duration'] ?? 0) as int,
         averageRating: double.tryParse('${j['average_rating'] ?? 0}') ?? 0,
@@ -92,6 +98,7 @@ class Attachment {
     this.isContent = false,
     this.richText = '',
     this.fileUrl = '',
+    this.allowDownload = false,
   });
 
   final String uuid;
@@ -100,6 +107,9 @@ class Attachment {
   final bool isContent;
   final String richText;
   final String fileUrl;
+  // Admin opt-in: only when true may the student save/share the file. Default
+  // false = view-only (basic content protection).
+  final bool allowDownload;
 
   factory Attachment.fromJson(Map<String, dynamic> j) => Attachment(
         uuid: j['uuid'].toString(),
@@ -108,6 +118,7 @@ class Attachment {
         isContent: (j['is_content'] ?? false) as bool,
         richText: (j['rich_text_content'] ?? '') as String,
         fileUrl: (j['file_url'] ?? '') as String,
+        allowDownload: (j['allow_download'] ?? false) as bool,
       );
 }
 
@@ -123,6 +134,7 @@ class Lesson {
     this.resourceUrl = '',
     this.categoryUuid = '',
     this.attachments = const [],
+    this.locked = false,
   });
 
   final String uuid;
@@ -135,6 +147,9 @@ class Lesson {
   final String resourceUrl;
   final String categoryUuid;
   final List<Attachment> attachments;
+  // True when the student can't open the content yet (not enrolled, not free).
+  // The lesson still shows in the list (web parity); content URLs are empty.
+  final bool locked;
 
   factory Lesson.fromJson(Map<String, dynamic> j) => Lesson(
         uuid: j['uuid'] as String,
@@ -149,6 +164,7 @@ class Lesson {
         attachments: ((j['attachments'] as List?) ?? [])
             .map((e) => Attachment.fromJson(e as Map<String, dynamic>))
             .toList(),
+        locked: (j['locked'] ?? false) as bool,
       );
 }
 
@@ -192,6 +208,8 @@ class TestSeriesItem {
     this.isFree = false,
     this.isEnrolled = false,
     this.price = '0',
+    this.finalPrice = '0',
+    this.discountActive = false,
     this.totalTests = 0,
     this.totalQuestions = 0,
   });
@@ -203,7 +221,9 @@ class TestSeriesItem {
   final String thumbnail;
   final bool isFree;
   final bool isEnrolled;
-  final String price;
+  final String price;          // original (struck through when discounted)
+  final String finalPrice;     // discounted price actually paid (web parity)
+  final bool discountActive;
   final int totalTests;
   final int totalQuestions;
 
@@ -216,6 +236,8 @@ class TestSeriesItem {
         isFree: (j['is_free'] ?? false) as bool,
         isEnrolled: (j['is_enrolled'] ?? false) as bool,
         price: (j['price'] ?? '0').toString(),
+        finalPrice: (j['final_price'] ?? j['price'] ?? '0').toString(),
+        discountActive: (j['discount_active'] ?? false) as bool,
         totalTests: (j['total_tests'] ?? 0) as int,
         totalQuestions: (j['total_questions'] ?? 0) as int,
       );
@@ -231,6 +253,9 @@ class BundleItem {
     this.isFree = false,
     this.isEnrolled = false,
     this.price = '0',
+    this.finalPrice = '0',
+    this.discountActive = false,
+    this.totalValue = '0',
     this.savings = '0',
   });
 
@@ -241,8 +266,11 @@ class BundleItem {
   final String thumbnail;
   final bool isFree;
   final bool isEnrolled;
-  final String price;
-  final String savings;
+  final String price;          // original bundle price (before % discount)
+  final String finalPrice;     // discounted bundle price actually paid (web parity)
+  final bool discountActive;
+  final String totalValue;     // "Worth" = sum of item prices (struck on the web)
+  final String savings;        // total_value − final_price (server-computed, web parity)
 
   factory BundleItem.fromJson(Map<String, dynamic> j) => BundleItem(
         uuid: j['uuid'] as String,
@@ -253,6 +281,9 @@ class BundleItem {
         isFree: (j['is_free'] ?? false) as bool,
         isEnrolled: (j['is_enrolled'] ?? false) as bool,
         price: (j['price'] ?? '0').toString(),
+        finalPrice: (j['final_price'] ?? j['price'] ?? '0').toString(),
+        discountActive: (j['discount_active'] ?? false) as bool,
+        totalValue: (j['total_value'] ?? '0').toString(),
         savings: (j['savings_amount'] ?? '0').toString(),
       );
 }
@@ -341,25 +372,74 @@ class CartData {
 }
 
 class LiveNowItem {
-  LiveNowItem({required this.title, this.kind = '', this.isFree = false});
+  LiveNowItem({
+    required this.title,
+    this.kind = '',
+    this.uuid = '',
+    this.authMode = false,
+    this.isFree = false,
+    this.hasAccess = false,
+    this.parentKind = '',
+    this.parentUuid = '',
+  });
   final String title;
-  final String kind;
+  final String kind; // 'test' or 'lesson' (live lesson)
+  final String uuid; // destination uuid for deep-linking into the native screen
+  final bool authMode; // external test → attempt with auth_mode=true
   final bool isFree;
+  // Can the student open it right now (free / enrolled / holds a PASS)? If not,
+  // the home screen routes to the buyable parent below instead of an attempt
+  // that the backend would reject with 403.
+  final bool hasAccess;
+  final String parentKind; // 'test_series' | 'external_exam' | 'course'
+  final String parentUuid; // that parent's uuid (for /test-series, /external-exam, /course)
   factory LiveNowItem.fromJson(Map<String, dynamic> j) => LiveNowItem(
         title: (j['title'] ?? '') as String,
         kind: (j['kind'] ?? '') as String,
+        uuid: (j['uuid'] ?? '').toString(),
+        authMode: (j['auth_mode'] ?? false) as bool,
         isFree: (j['is_free'] ?? false) as bool,
+        hasAccess: (j['has_access'] ?? false) as bool,
+        parentKind: (j['parent_kind'] ?? '').toString(),
+        parentUuid: (j['parent_uuid'] ?? '').toString(),
+      );
+}
+
+/// A recent completed test/exam attempt, for the personal "Recent activity" row.
+class RecentActivity {
+  RecentActivity({
+    required this.attemptUuid,
+    required this.title,
+    this.score = '0',
+    this.isExternal = false,
+    this.date,
+  });
+  final String attemptUuid;
+  final String title;
+  final String score;
+  final bool isExternal;
+  final String? date;
+  factory RecentActivity.fromJson(Map<String, dynamic> j) => RecentActivity(
+        attemptUuid: (j['attempt_uuid'] ?? '').toString(),
+        title: (j['title'] ?? '') as String,
+        score: (j['score'] ?? '0').toString(),
+        isExternal: (j['is_external'] ?? false) as bool,
+        date: j['date'] as String?,
       );
 }
 
 class HomeData {
   HomeData({
+    this.myCourses = const [],
+    this.recentActivity = const [],
     this.featuredCourses = const [],
     this.featuredTestSeries = const [],
     this.featuredBundles = const [],
     this.liveNow = const [],
   });
 
+  final List<Course> myCourses; // "Continue learning" — the student's own courses
+  final List<RecentActivity> recentActivity;
   final List<Course> featuredCourses;
   final List<TestSeriesItem> featuredTestSeries;
   final List<BundleItem> featuredBundles;
@@ -369,6 +449,8 @@ class HomeData {
     List<T> parse<T>(String key, T Function(Map<String, dynamic>) f) =>
         ((j[key] as List?) ?? []).map((e) => f(e as Map<String, dynamic>)).toList();
     return HomeData(
+      myCourses: parse('my_courses', Course.fromJson),
+      recentActivity: parse('recent_activity', RecentActivity.fromJson),
       featuredCourses: parse('featured_courses', Course.fromJson),
       featuredTestSeries: parse('featured_test_series', TestSeriesItem.fromJson),
       featuredBundles: parse('featured_bundles', BundleItem.fromJson),
@@ -513,15 +595,39 @@ class SeriesTest {
     this.isFree = false,
     this.isAvailable = true,
     this.locked = false,
+    this.availabilityStatus = 'available',
+    this.availFrom,
+    this.allowReattempt = true,
+    this.hasCompleted = false,
+    this.hasIncomplete = false,
+    this.canResume = false,
+    this.canStartFresh = true,
+    this.canViewResult = false,
+    this.completedAttemptId,
+    this.incompleteAttemptId,
   });
   final String uuid;
   final String title;
   final int questions;
-  final int duration;
+  final int duration; // seconds
   final String totalScore;
   final bool isFree;
   final bool isAvailable;
   final bool locked;
+  final String availabilityStatus; // available | upcoming | expired | inactive
+  final String? availFrom; // ISO datetime when 'upcoming' (scheduled)
+  final bool allowReattempt;
+  final bool hasCompleted;
+  final bool hasIncomplete;
+  final bool canResume;
+  final bool canStartFresh;
+  final bool canViewResult;
+  final String? completedAttemptId;
+  final String? incompleteAttemptId;
+
+  /// Duration shown in minutes (backend stores seconds for these endpoints).
+  int get durationMinutes => duration >= 60 ? (duration / 60).round() : duration;
+
   factory SeriesTest.fromJson(Map<String, dynamic> j) => SeriesTest(
         uuid: j['uuid'].toString(),
         title: (j['title'] ?? '') as String,
@@ -531,15 +637,34 @@ class SeriesTest {
         isFree: (j['is_free'] ?? false) as bool,
         isAvailable: (j['is_available'] ?? true) as bool,
         locked: (j['locked'] ?? false) as bool,
+        availabilityStatus: (j['availability_status'] ?? 'available') as String,
+        availFrom: j['avail_from'] as String?,
+        allowReattempt: (j['allow_reattempt'] ?? true) as bool,
+        hasCompleted: (j['has_completed'] ?? false) as bool,
+        hasIncomplete: (j['has_incomplete'] ?? false) as bool,
+        canResume: (j['can_resume'] ?? false) as bool,
+        canStartFresh: (j['can_start_fresh'] ?? true) as bool,
+        canViewResult: (j['can_view_result'] ?? false) as bool,
+        completedAttemptId: j['completed_attempt_id'] as String?,
+        incompleteAttemptId: j['incomplete_attempt_id'] as String?,
       );
 }
 
 class SeriesCategory {
-  SeriesCategory({required this.uuid, required this.title, this.isFree = false, this.tests = const []});
+  SeriesCategory({
+    required this.uuid,
+    required this.title,
+    this.isFree = false,
+    this.tests = const [],
+    this.hasMore = false,
+    this.totalTests = 0,
+  });
   final String uuid;
   final String title;
   final bool isFree;
   final List<SeriesTest> tests;
+  final bool hasMore;     // more tests beyond the first page (lazy-load)
+  final int totalTests;
   factory SeriesCategory.fromJson(Map<String, dynamic> j) => SeriesCategory(
         uuid: j['uuid'].toString(),
         title: (j['title'] ?? '') as String,
@@ -547,6 +672,8 @@ class SeriesCategory {
         tests: ((j['tests'] as List?) ?? [])
             .map((e) => SeriesTest.fromJson(e as Map<String, dynamic>))
             .toList(),
+        hasMore: (j['has_more'] ?? false) as bool,
+        totalTests: (j['total_tests'] ?? 0) as int,
       );
 }
 
@@ -558,6 +685,8 @@ class TestSeriesContents {
     this.isEnrolled = false,
     this.isFree = false,
     this.price = '0',
+    this.finalPrice = '0',
+    this.discountActive = false,
     this.categories = const [],
   });
   final String uuid;
@@ -566,6 +695,8 @@ class TestSeriesContents {
   final bool isEnrolled;
   final bool isFree;
   final String price;
+  final String finalPrice;
+  final bool discountActive;
   final List<SeriesCategory> categories;
   factory TestSeriesContents.fromJson(Map<String, dynamic> j) => TestSeriesContents(
         uuid: j['uuid'].toString(),
@@ -574,6 +705,8 @@ class TestSeriesContents {
         isEnrolled: (j['is_enrolled'] ?? false) as bool,
         isFree: (j['is_free'] ?? false) as bool,
         price: (j['price'] ?? '0').toString(),
+        finalPrice: (j['final_price'] ?? j['price'] ?? '0').toString(),
+        discountActive: (j['discount_active'] ?? false) as bool,
         categories: ((j['categories'] as List?) ?? [])
             .map((e) => SeriesCategory.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -600,6 +733,38 @@ class BundleContents {
         testSeries: ((j['test_series'] as List?) ?? [])
             .map((e) => TestSeriesItem.fromJson(e as Map<String, dynamic>))
             .toList(),
+      );
+}
+
+/// What the student currently owns (live access), for Profile → My learning.
+class MyEnrolled {
+  MyEnrolled({
+    this.courses = const [],
+    this.testSeries = const [],
+    this.bundles = const [],
+    this.hasPass = false,
+    this.isPlatform = false,
+  });
+  final List<Course> courses;
+  final List<TestSeriesItem> testSeries;
+  final List<BundleItem> bundles;
+  final bool hasPass;
+  final bool isPlatform;
+
+  bool get isEmpty => courses.isEmpty && testSeries.isEmpty && bundles.isEmpty && !hasPass;
+
+  factory MyEnrolled.fromJson(Map<String, dynamic> j) => MyEnrolled(
+        courses: ((j['courses'] as List?) ?? [])
+            .map((e) => Course.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        testSeries: ((j['test_series'] as List?) ?? [])
+            .map((e) => TestSeriesItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        bundles: ((j['bundles'] as List?) ?? [])
+            .map((e) => BundleItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        hasPass: (j['has_pass'] ?? false) as bool,
+        isPlatform: (j['is_platform'] ?? false) as bool,
       );
 }
 

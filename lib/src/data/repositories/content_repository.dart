@@ -1,6 +1,16 @@
 import '../../core/api_client.dart';
 import '../models/models.dart';
+import '../models/quiz_models.dart';
 import '../models/school_config.dart';
+import '../models/test_models.dart';
+
+/// One page of a paginated list + whether more pages follow (for infinite scroll).
+class PagedResult<T> {
+  PagedResult({required this.items, required this.hasMore, required this.page});
+  final List<T> items;
+  final bool hasMore;
+  final int page;
+}
 
 /// Reads the student content endpoints. Every call is tenant-scoped on the
 /// SERVER (by the JWT identity), so the app never sends a school id.
@@ -33,6 +43,7 @@ class ContentRepository {
     return _results(res.data).map((e) => Course.fromJson(e)).toList();
   }
 
+
   Future<Course> course(String uuid) async {
     final res = await _client.raw.get('/courses/$uuid/');
     return Course.fromJson(res.data as Map<String, dynamic>);
@@ -54,6 +65,26 @@ class ContentRepository {
     return _results(res.data).map((e) => TestSeriesItem.fromJson(e)).toList();
   }
 
+  /// Load MORE tests for a category (test series) or section (external exam) —
+  /// the contents endpoint returns the first 20 per group; this pages in the rest.
+  /// Returns (tests, hasMore).
+  Future<({List<SeriesTest> tests, bool hasMore})> moreCategoryTests({
+    required String parentUuid,
+    required String groupUuid,
+    required int page,
+    required bool external,
+  }) async {
+    final path = external
+        ? '/external-exams/$parentUuid/sections/$groupUuid/tests/'
+        : '/test-series/$parentUuid/categories/$groupUuid/tests/';
+    final res = await _client.raw.get(path, queryParameters: {'page': page});
+    final data = res.data as Map;
+    final tests = ((data['tests'] as List?) ?? [])
+        .map((e) => SeriesTest.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+    return (tests: tests, hasMore: (data['has_more'] ?? false) as bool);
+  }
+
   Future<List<BundleItem>> bundles({int page = 1}) async {
     final res = await _client.raw.get('/bundles/', queryParameters: {'page': page});
     return _results(res.data).map((e) => BundleItem.fromJson(e)).toList();
@@ -69,9 +100,25 @@ class ContentRepository {
     return TestSeriesContents.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<List<ExternalExam>> externalExams({int page = 1}) async {
+  /// External-exam contents. The backend returns the SAME shape as a test series
+  /// (sections→`categories`, external tests→`tests`), so we reuse the model and
+  /// the test-series detail screen. `is_enrolled` here means "holds a PASS".
+  Future<TestSeriesContents> externalExamContents(String uuid) async {
+    final res = await _client.raw.get('/external-exams/$uuid/contents/');
+    return TestSeriesContents.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// ONE page of external exams + whether more pages follow. The Tests tab loads
+  /// page 1 fast and pages in the rest on scroll (lazy / infinite scroll), so a
+  /// school with MANY exams still feels instant and no exam past page 1 is lost
+  /// (the earlier bug: app fetched only page 1, hiding low-priority exams that
+  /// were on page 2 while the web explore page still showed them).
+  Future<PagedResult<ExternalExam>> externalExamsPage({int page = 1}) async {
     final res = await _client.raw.get('/external-exams/', queryParameters: {'page': page});
-    return _results(res.data).map((e) => ExternalExam.fromJson(e)).toList();
+    final data = res.data;
+    final hasMore = data is Map && data['next'] != null && '${data['next']}'.isNotEmpty;
+    final items = _results(data).map((e) => ExternalExam.fromJson(e)).toList();
+    return PagedResult(items: items, hasMore: hasMore, page: page);
   }
 
   Future<Map<String, dynamic>> passPlans() async {
@@ -135,6 +182,78 @@ class ContentRepository {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  // ── Native quiz engine (quiz embeds answers → scored locally → attempt recorded) ──
+  Future<QuizPaper> quizData(String quizUuid) async {
+    final res = await _client.raw.get('/quizzes/$quizUuid/data/');
+    return QuizPaper.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  /// Record a finished quiz attempt + get gamification (xp/coins/badges/leaderboard).
+  Future<Map<String, dynamic>> recordQuizAttempt(
+      String quizUuid, double marks, double total, int timeSeconds) async {
+    final pct = total > 0 ? (marks / total) * 100 : 0;
+    final res = await _client.raw.post('/quizzes/$quizUuid/attempt/', data: {
+      'marks_obtained': marks, 'total_marks': total,
+      'percentage': pct, 'time_taken_seconds': timeSeconds,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// Test leaderboard (rank/percentile/total + top performers). Same numbers as
+  /// the web result page (shared backend builder, synthetic-fill aware).
+  Future<Map<String, dynamic>> testLeaderboard(String attemptUuid) async {
+    final res = await _client.raw.get('/tests/leaderboard/$attemptUuid/');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// The student's last 3 completed attempts of the SAME test (for the result
+  /// page's attempt switcher). Most recent first; each {attempt_uuid, attempt_number,
+  /// date, score, is_current}.
+  Future<List<Map<String, dynamic>>> testAttempts(String attemptUuid) async {
+    final res = await _client.raw.get('/tests/$attemptUuid/attempts/');
+    final list = (res.data is Map ? (res.data['attempts'] ?? []) : []) as List;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Submit a post-test rating (0–5) + optional review for the test's parent
+  /// series/exam (→ the existing Review model). Returns the server message.
+  Future<Map<String, dynamic>> submitTestReview(
+      String attemptUuid, double rating, String reviewText) async {
+    final res = await _client.raw.post('/tests/$attemptUuid/review/',
+        data: {'rating': rating, 'review_text': reviewText});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// The student's complaints/feedback (recent first) — reuses the web Complaint
+  /// model, so admins see app-raised issues in the same place.
+  Future<List<Map<String, dynamic>>> complaints() async {
+    final res = await _client.raw.get('/complaints/');
+    final list = (res.data is Map ? (res.data['results'] ?? []) : []) as List;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Raise a new complaint or feedback entry (admin-visible).
+  Future<void> submitComplaint({
+    required String subject,
+    required String description,
+    required String entryType, // 'complaint' | 'feedback'
+    String category = 'other',
+    String? feedbackType,
+  }) async {
+    await _client.raw.post('/complaints/', data: {
+      'subject': subject, 'description': description, 'entry_type': entryType,
+      'category': category, if (feedbackType != null) 'feedback_type': feedbackType,
+    });
+  }
+
+  /// Detailed per-question solution for a completed attempt (your answer vs
+  /// correct + explanation). Same data the web solution page shows.
+  Future<TestSolution> testSolution(String attemptUuid) async {
+    final res = await _client.raw.get('/tests/solution/$attemptUuid/');
+    final data = Map<String, dynamic>.from((res.data as Map)['data'] ?? {});
+    return TestSolution.fromJson(data);
+  }
+
   // ── Forum ──
   Future<Map<String, dynamic>> forumList({int page = 1}) async {
     final res = await _client.raw.get('/forum/', queryParameters: {'page': page});
@@ -172,6 +291,13 @@ class ContentRepository {
   Future<List<Order>> orders({int page = 1}) async {
     final res = await _client.raw.get('/orders/', queryParameters: {'page': page});
     return _results(res.data).map((e) => Order.fromJson(e)).toList();
+  }
+
+  /// Everything the student currently OWNS (live access): courses, test series,
+  /// bundles, and whether they hold a PASS. Powers Profile → My learning.
+  Future<MyEnrolled> myEnrolled() async {
+    final res = await _client.raw.get('/my-enrolled/');
+    return MyEnrolled.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<CourseQuizzes> courseQuizzes(String uuid) async {
@@ -251,6 +377,7 @@ class ContentRepository {
     if (data is List) return data.cast<Map<String, dynamic>>();
     return const [];
   }
+
 }
 
 class CourseLessons {

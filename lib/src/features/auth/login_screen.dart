@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../core/config.dart';
 import '../../core/providers.dart';
@@ -38,6 +39,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) context.go('/home');
     } catch (e) {
       setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Effective Google Web OAuth client id: the SCHOOL's own (BYOK, from
+  /// /school/config) wins; otherwise the build's GOOGLE_SERVER_CLIENT_ID (the
+  /// platform owner's client) — so the platform school works with no admin config.
+  String _googleClientId() {
+    final fromSchool = ref.read(schoolConfigProvider).maybeWhen(
+        data: (c) => c.googleClientId, orElse: () => '');
+    return fromSchool.isNotEmpty ? fromSchool : AppConfig.googleServerClientId;
+  }
+
+  Future<void> _googleSignIn() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      // serverClientId = the WEB OAuth client id; makes the ID token's `aud`
+      // match the backend's GOOGLE_OAUTH_CLIENT_ID. The Android OAuth client
+      // (package + SHA-1) must also exist in the same Google Cloud project.
+      final clientId = _googleClientId();
+      final google = GoogleSignIn(
+        serverClientId: clientId.isNotEmpty ? clientId : null,
+      );
+      final account = await google.signIn();
+      if (account == null) { // user cancelled
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) throw Exception('No Google token received.');
+      await ref.read(authRepoProvider).loginWithGoogle(idToken);
+      ref.invalidate(hasSessionProvider);
+      ref.invalidate(schoolConfigProvider);
+      if (mounted) context.go('/home');
+    } catch (e) {
+      setState(() => _error = e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -109,6 +148,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : const Text('Sign in'),
                   ),
                   const SizedBox(height: 14),
+                  // "Continue with Google" only shows once a client id is available
+                  // (school's own or the build's) — no broken button otherwise.
+                  if (_googleClientId().isNotEmpty) ...[
+                    Row(children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('or', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                      ),
+                      const Expanded(child: Divider()),
+                    ]),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _googleSignIn,
+                      icon: const Icon(Icons.g_mobiledata, size: 28),
+                      label: const Text('Continue with Google'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48)),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   // Signup opens the school's WEB signup page in-app: it carries the
                   // existing Turnstile captcha, email verification and plan seat-gate,
                   // so we reuse it rather than duplicating that logic natively.

@@ -26,7 +26,7 @@ class OrdersScreen extends ConsumerWidget {
           await ref.read(ordersProvider.future);
         },
         builder: (context, list) => ListView.separated(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
           itemCount: list.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
@@ -45,7 +45,7 @@ class OrdersScreen extends ConsumerWidget {
                   if (multi) '${o.itemCount} items',
                   if (o.date != null) _date(o.date!),
                 ].where((s) => s.isNotEmpty).join(' · '),
-                style: const TextStyle(color: Colors.black54, fontSize: 12),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
               ),
             );
             final trailingW = Text('₹${o.totalPaid}', style: const TextStyle(fontWeight: FontWeight.w700));
@@ -64,7 +64,7 @@ class OrdersScreen extends ConsumerWidget {
                       children: o.items.map((it) => ListTile(
                             dense: true,
                             contentPadding: EdgeInsets.zero,
-                            leading: Icon(_iconFor(it.itemType), size: 20, color: Colors.black45),
+                            leading: Icon(_iconFor(it.itemType), size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
                             title: Text(it.title, style: const TextStyle(fontSize: 14)),
                             trailing: Text('₹${it.pricePaid}', style: const TextStyle(fontSize: 13)),
                           )).toList(),

@@ -82,8 +82,8 @@ class CartScreen extends ConsumerWidget {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-        decoration: BoxDecoration(color: Colors.white, boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2)),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, -2)),
         ]),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           // Coupon + coins row

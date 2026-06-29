@@ -27,23 +27,28 @@ class PassScreen extends ConsumerWidget {
         ),
         data: (data) {
           if (data['available'] != true) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Text('PASS is not available for this institute.',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             );
           }
           final List plans = (data['plans'] as List?) ?? [];
           final trialEligible = data['trial_eligible'] == true;
+          final status = Map<String, dynamic>.from(data['pass_status'] ?? const {});
+          final active = status['active'] == true;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text('One PASS unlocks all external exams',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              if (active) _ActivePassBanner(status: status),
+              Text(active ? 'Renew or extend your PASS' : 'One PASS unlocks all external exams',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 4),
-              const Text('Choose a plan:', style: TextStyle(color: Colors.black54)),
+              Text('Choose a plan:',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 12),
               ...plans.map((p) => _PlanCard(plan: Map<String, dynamic>.from(p))),
               if (trialEligible) ...[
@@ -85,6 +90,52 @@ class PassScreen extends ConsumerWidget {
   }
 }
 
+/// Shows the student's current PASS validity at the top of the PASS screen.
+class _ActivePassBanner extends StatelessWidget {
+  const _ActivePassBanner({required this.status});
+  final Map<String, dynamic> status;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isTrial = status['is_trial'] == true;
+    final validTill = (status['valid_till'] ?? '').toString();
+    final until = DateTime.tryParse(validTill)?.toLocal();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
+      ),
+      child: Row(children: [
+        Icon(Icons.verified_rounded, color: Colors.green.shade700, size: 26),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(isTrial ? 'PASS trial active' : 'PASS active',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: Colors.green.shade800)),
+              const SizedBox(height: 2),
+              Text(
+                until != null ? 'Valid till ${_fmtDate(until)}' : 'You can attempt every PASS exam',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+String _fmtDate(DateTime d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
 class _PlanCard extends ConsumerWidget {
   const _PlanCard({required this.plan});
   final Map<String, dynamic> plan;
@@ -100,13 +151,13 @@ class _PlanCard extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
           child: Text('$months', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
         ),
         title: Text('$months months', style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: hasDiscount
             ? Row(children: [
-                Text('₹$original', style: const TextStyle(decoration: TextDecoration.lineThrough, color: Colors.black45, fontSize: 12)),
+                Text('₹$original', style: TextStyle(decoration: TextDecoration.lineThrough, color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                 const SizedBox(width: 6),
                 Text('$discount% off', style: const TextStyle(color: Colors.green, fontSize: 12)),
               ])

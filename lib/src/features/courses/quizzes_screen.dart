@@ -25,31 +25,30 @@ class QuizzesScreen extends ConsumerWidget {
           await ref.read(courseQuizzesProvider(courseUuid).future);
         },
         builder: (context, q) => ListView.separated(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
           itemCount: q.quizzes.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
           itemBuilder: (_, i) {
+            final cs = Theme.of(context).colorScheme;
             final quiz = q.quizzes[i];
             return Card(
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFFEFF3FB),
-                  child: Icon(Icons.quiz_outlined,
-                      color: Theme.of(context).colorScheme.primary),
+                  backgroundColor: cs.primary.withValues(alpha: 0.12),
+                  child: Icon(Icons.quiz_outlined, color: cs.primary),
                 ),
                 title: Text(quiz.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Wrap(spacing: 12, children: [
-                    if (quiz.questions > 0) _meta(Icons.help_outline, '${quiz.questions} Qs'),
-                    if (quiz.time > 0) _meta(Icons.timer_outlined, '${quiz.time} min'),
+                    if (quiz.questions > 0) _meta(context, Icons.help_outline, '${quiz.questions} Qs'),
+                    if (quiz.time > 0) _meta(context, Icons.timer_outlined, _fmtDuration(quiz.time)),
                   ]),
                 ),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/handoff', extra: {
-                  'next': '/quiz/${quiz.uuid}/',
-                  'title': quiz.title,
-                }),
+                // NATIVE quiz player (was a webview handoff). Quiz embeds answers,
+                // so it's scored locally and the attempt is recorded for gamification.
+                onTap: () => context.push('/quiz/${quiz.uuid}/play', extra: {'title': quiz.title}),
               ),
             );
           },
@@ -58,12 +57,20 @@ class QuizzesScreen extends ConsumerWidget {
     );
   }
 
-  Widget _meta(IconData icon, String text) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.black45),
-          const SizedBox(width: 3),
-          Text(text, style: const TextStyle(color: Colors.black54, fontSize: 12)),
-        ],
-      );
+  Widget _meta(BuildContext context, IconData icon, String text) {
+    final c = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: c),
+        const SizedBox(width: 3),
+        Text(text, style: TextStyle(color: c, fontSize: 12)),
+      ],
+    );
+  }
+
+  // Quiz time is stored in MINUTES.
+  String _fmtDuration(int minutes) => minutes >= 60
+      ? '${minutes ~/ 60}h ${minutes % 60 == 0 ? '' : '${minutes % 60}m'}'.trim()
+      : '$minutes min';
 }

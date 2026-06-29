@@ -120,8 +120,8 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
         decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, -1))],
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 6, offset: const Offset(0, -1))],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

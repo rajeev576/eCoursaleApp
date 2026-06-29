@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/widgets/async_view.dart';
+import '../../core/widgets/price_text.dart';
 import '../../data/models/models.dart';
 import '../cart/cart_screen.dart' show addToCart;
 import '../checkout/checkout_service.dart';
@@ -31,16 +32,19 @@ class BundleDetailScreen extends ConsumerWidget {
           await ref.read(bundleContentsProvider(uuid).future);
         },
         builder: (context, c) => ListView(
-          padding: const EdgeInsets.all(16),
+          // Extra bottom inset so the last item clears the bottom action bar +
+          // the Android system nav bar.
+          padding: EdgeInsets.fromLTRB(
+              16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
           children: [
             Text(c.bundle.title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text(
-              c.isEnrolled ? 'Owned' : (c.bundle.isFree ? 'Free' : '₹${c.bundle.price}'),
-              style: TextStyle(color: c.isEnrolled ? Colors.green : Colors.black54),
+              c.isEnrolled ? 'Owned' : (c.bundle.isFree ? 'Free' : '₹${c.bundle.finalPrice}'),
+              style: TextStyle(color: c.isEnrolled ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-            if (!c.bundle.isFree && double.tryParse(c.bundle.savings) != null && double.parse(c.bundle.savings) > 0)
+            if (!c.bundle.isFree && !c.isEnrolled && (double.tryParse(c.bundle.savings) ?? 0) > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text('You save ₹${c.bundle.savings}', style: const TextStyle(color: Colors.green, fontSize: 13)),
@@ -56,7 +60,7 @@ class BundleDetailScreen extends ConsumerWidget {
                       leading: _thumb(course.thumbnail, Icons.play_circle_outline),
                       title: Text(course.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text('${course.totalLessons} lessons',
-                          style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/course/${course.uuid}'),
                     ),
@@ -73,7 +77,7 @@ class BundleDetailScreen extends ConsumerWidget {
                       leading: _thumb(ts.thumbnail, Icons.assignment_outlined),
                       title: Text(ts.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text('${ts.totalTests} tests',
-                          style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/test-series/${ts.uuid}'),
                     ),
@@ -106,8 +110,8 @@ class BundleDetailScreen extends ConsumerWidget {
     return SafeArea(
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        decoration: BoxDecoration(color: Colors.white, boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, -2)),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, -2)),
         ]),
         child: Row(children: [
           Expanded(
@@ -115,8 +119,15 @@ class BundleDetailScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Bundle price', style: TextStyle(color: Colors.black54, fontSize: 12)),
-                Text('₹${b.price}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text('Bundle price', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                // Worth (total_value) struck through + the discounted bundle price,
+                // exactly like the website's bundle-detail.
+                PriceText(
+                  price: b.totalValue, finalPrice: b.finalPrice,
+                  discountActive: true, isFree: b.isFree, size: 18),
+                if ((double.tryParse(b.savings) ?? 0) > 0)
+                  Text('You save ₹${b.savings}',
+                      style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

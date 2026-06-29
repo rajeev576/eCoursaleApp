@@ -33,26 +33,58 @@ class CoinsScreen extends ConsumerWidget {
           }
           final balance = data['balance'] ?? 0;
           final List txns = (data['results'] as List?) ?? [];
+          final label = (data['label'] ?? 'Coins').toString();
+          final valueRupees = data['value_rupees'] ?? 0;
+          final maxPct = data['max_pct'] ?? 25;
+          final maxPerOrder = data['max_per_order'] ?? 100;
+          final perRupee = data['coins_per_rupee'] ?? 4;
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(coinsProvider);
               await ref.read(coinsProvider.future);
             },
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
               children: [
-                // Balance card
+                // Balance card — balance, its ₹ value, and a muted line explaining
+                // how/where coins are used (at checkout) and the per-order caps.
                 Card(
                   color: Theme.of(context).colorScheme.primary,
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Icon(Icons.monetization_on, color: Colors.amber, size: 40),
+                        const Icon(Icons.monetization_on, color: Colors.amber, size: 34),
                         const SizedBox(height: 8),
-                        Text('$balance',
-                            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold)),
-                        const Text('Coins', style: TextStyle(color: Colors.white70)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text('$balance',
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 6),
+                            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text('Worth ₹$valueRupees',
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Use coins at checkout — $perRupee coins = ₹1. '
+                            'Up to $maxPct% of an order (max ₹$maxPerOrder).',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.35),
+                          ),
+                        ),
                       ],
                     ),
                   ),

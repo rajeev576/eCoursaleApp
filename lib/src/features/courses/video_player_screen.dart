@@ -43,12 +43,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_loading)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
-        ],
+      // Keep the player above the Android system nav bar (edge-to-edge safe).
+      body: SafeArea(
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_loading)
+              const Center(child: CircularProgressIndicator(color: Colors.white)),
+          ],
+        ),
       ),
     );
   }

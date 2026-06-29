@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/models.dart';
 import '../data/models/school_config.dart';
+import '../data/models/test_models.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/content_repository.dart';
 import 'api_client.dart';
@@ -29,7 +30,9 @@ final hasSessionProvider = FutureProvider<bool>(
 final schoolConfigProvider = FutureProvider<SchoolConfig>(
     (ref) => ref.watch(contentRepoProvider).schoolConfig());
 
-final homeProvider = FutureProvider.autoDispose<HomeData>(
+// Home (dashboard rails) is a top tab too — keep it cached for the session so
+// returning to Home is instant. Refreshes on pull-to-refresh / explicit invalidate.
+final homeProvider = FutureProvider<HomeData>(
     (ref) => ref.watch(contentRepoProvider).home());
 
 final cartProvider = FutureProvider.autoDispose<CartData>(
@@ -41,21 +44,31 @@ final coinsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 final forumProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
     (ref) => ref.watch(contentRepoProvider).forumList());
 
+final complaintsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
+    (ref) => ref.watch(contentRepoProvider).complaints());
+
 final forumDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
     (ref, uuid) => ref.watch(contentRepoProvider).forumDetail(uuid));
 
 // ── Content lists ────────────────────────────────────────────────────────────
-final coursesProvider = FutureProvider.autoDispose<List<Course>>(
+// NOTE: the top-level TAB lists are intentionally NOT autoDispose. They're the
+// browse surfaces the student returns to constantly, so we keep them cached for
+// the whole session — switching tabs (and coming back from a detail) reads the
+// cache instantly instead of re-fetching + flashing a loader every time. Data
+// refreshes only on pull-to-refresh (onRefresh → ref.invalidate) or after an
+// action that explicitly invalidates them (enroll/buy). The DETAIL/CONTENTS
+// family providers below stay autoDispose so per-uuid caches don't pile up.
+final coursesProvider = FutureProvider<List<Course>>(
     (ref) => ref.watch(contentRepoProvider).courses());
 
-final testSeriesProvider = FutureProvider.autoDispose<List<TestSeriesItem>>(
+final testSeriesProvider = FutureProvider<List<TestSeriesItem>>(
     (ref) => ref.watch(contentRepoProvider).testSeries());
 
-final bundlesProvider = FutureProvider.autoDispose<List<BundleItem>>(
+final bundlesProvider = FutureProvider<List<BundleItem>>(
     (ref) => ref.watch(contentRepoProvider).bundles());
 
-final externalExamsProvider = FutureProvider.autoDispose<List<ExternalExam>>(
-    (ref) => ref.watch(contentRepoProvider).externalExams());
+// External exams use an infinite-scroll controller instead of a one-shot
+// FutureProvider — see features/tests/external_exams_controller.dart.
 
 final notificationsProvider =
     FutureProvider.autoDispose<List<AppNotification>>(
@@ -81,8 +94,27 @@ final testSeriesContentsProvider =
     FutureProvider.autoDispose.family<TestSeriesContents, String>(
         (ref, uuid) => ref.watch(contentRepoProvider).testSeriesContents(uuid));
 
+// External exams reuse the TestSeriesContents shape (sections→categories).
+final externalExamContentsProvider =
+    FutureProvider.autoDispose.family<TestSeriesContents, String>(
+        (ref, uuid) => ref.watch(contentRepoProvider).externalExamContents(uuid));
+
 final ordersProvider = FutureProvider.autoDispose<List<Order>>(
     (ref) => ref.watch(contentRepoProvider).orders());
+
+final myEnrolledProvider = FutureProvider.autoDispose<MyEnrolled>(
+    (ref) => ref.watch(contentRepoProvider).myEnrolled());
+
+final testSolutionProvider = FutureProvider.autoDispose.family<TestSolution, String>(
+    (ref, attemptUuid) => ref.watch(contentRepoProvider).testSolution(attemptUuid));
+
+final testLeaderboardProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
+        (ref, attemptUuid) => ref.watch(contentRepoProvider).testLeaderboard(attemptUuid));
+
+final testAttemptsProvider =
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String>(
+        (ref, attemptUuid) => ref.watch(contentRepoProvider).testAttempts(attemptUuid));
 
 final lessonCommentsProvider =
     FutureProvider.autoDispose.family<List<Comment>, String>(
