@@ -70,11 +70,11 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
               error: (_, __) => _retry(),
               data: (list) {
                 if (list.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Padding(
-                      padding: EdgeInsets.all(32),
+                      padding: const EdgeInsets.all(32),
                       child: Text('No comments yet. Start the discussion!',
-                          style: TextStyle(color: Colors.black54)),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ),
                   );
                 }
@@ -131,7 +131,7 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                 children: [
                   Expanded(
                     child: Text('Replying to ${_replyingTo!.author}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 16),
@@ -208,6 +208,7 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
   @override
   Widget build(BuildContext context) {
     final c = widget.comment;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -219,15 +220,15 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
               InkWell(
                 onTap: widget.onLike,
                 child: Row(children: [
-                  const Icon(Icons.favorite_border, size: 16, color: Colors.black45),
+                  Icon(Icons.favorite_border, size: 16, color: muted),
                   const SizedBox(width: 3),
-                  Text('${c.likesCount}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  Text('${c.likesCount}', style: TextStyle(fontSize: 12, color: muted)),
                 ]),
               ),
               const SizedBox(width: 18),
               InkWell(
                 onTap: widget.onReply,
-                child: const Text('Reply', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                child: Text('Reply', style: TextStyle(fontSize: 12, color: muted)),
               ),
               if (c.repliesCount > 0) ...[
                 const SizedBox(width: 18),
@@ -275,7 +276,7 @@ class _CommentTileState extends ConsumerState<_CommentTile> {
                 children: [
                   Flexible(child: Text(c.author, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
                   const SizedBox(width: 6),
-                  Text(c.relativeTime, style: const TextStyle(fontSize: 11, color: Colors.black38)),
+                  Text(c.relativeTime, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   if (c.fromLive) ...[
                     const SizedBox(width: 6),
                     Container(

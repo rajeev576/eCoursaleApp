@@ -106,7 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Text('Sign in to continue',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: Colors.black54)),
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 28),
                   TextField(
                     controller: _email,
@@ -175,7 +175,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("New here? ", style: TextStyle(color: Colors.black54)),
+                      Text("New here? ", style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                       GestureDetector(
                         // Native signup (phone-OTP when SMS configured, else direct
                         // email/password). No webview.

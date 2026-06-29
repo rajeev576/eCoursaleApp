@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
@@ -43,7 +45,8 @@ class RichContent extends StatelessWidget {
           color: text,
         ),
         'p': Style(margin: Margins.only(bottom: 6)),
-        'img': Style(width: Width(100, Unit.percent)),
+        // NOTE: <img> is handled by the custom TagExtension below (so tiny embedded
+        // width/height attributes are ignored and the image scales sensibly).
         'table': Style(border: Border.all(color: const Color(0xFFCBD5E1))),
         'td': Style(
           border: Border.all(color: const Color(0xFFCBD5E1)),
@@ -77,14 +80,28 @@ class RichContent extends StatelessWidget {
             ),
           ),
         ),
+        // Custom <img>: ignore the (often tiny) embedded width/height and render
+        // the image at a sensible size — full available width but capped so small
+        // images aren't blown up pixelated, never overflowing the card. Tap to
+        // zoom. Handles base64 data URIs and remote URLs.
+        TagExtension(
+          tagsToExtend: {'img'},
+          builder: (ctx) {
+            final src = ctx.attributes['src'] ?? '';
+            if (src.isEmpty) return const SizedBox.shrink();
+            return _RichImage(src: src);
+          },
+        ),
         TagExtension(
           tagsToExtend: {'tex'},
           builder: (ctx) {
             final raw = ctx.innerHtml;
             final tex = _unescape(raw);
-            // Long inline math can't fit on one line; promote it to block so it
-            // gets the horizontal scroll treatment instead of overflowing.
-            final display = ctx.attributes['display'] == '1' || tex.length > 60;
+            // Long inline math can't fit on a narrow card; promote it to block
+            // (which is horizontally scrollable) so it scrolls instead of
+            // overflowing. Threshold kept conservative so short inline math
+            // ($k$, $x^2$) still flows inline with the text.
+            final display = ctx.attributes['display'] == '1' || tex.length > 32;
             final widget = Math.tex(
               tex,
               mathStyle: display ? MathStyle.display : MathStyle.text,
@@ -301,5 +318,78 @@ class _PassageBlockState extends State<PassageBlock> {
       case 'comprehension': return 'Comprehension';
       default: return 'Passage';
     }
+  }
+}
+
+/// An image inside rich content. Renders at the FULL available width but never
+/// upscales a small image past ~2x (so a tiny diagram stays crisp, not blurry),
+/// and never overflows the card. Tap to open a zoomable full-screen view.
+/// Handles base64 data URIs and remote URLs.
+class _RichImage extends StatelessWidget {
+  const _RichImage({required this.src});
+  final String src;
+
+  bool get _isData => src.startsWith('data:');
+
+  ImageProvider? get _provider {
+    try {
+      if (_isData) {
+        final comma = src.indexOf(',');
+        if (comma < 0) return null;
+        return MemoryImage(base64Decode(src.substring(comma + 1)));
+      }
+      return NetworkImage(src);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = _provider;
+    if (provider == null) return const SizedBox.shrink();
+    return LayoutBuilder(builder: (context, constraints) {
+      final maxW = constraints.maxWidth.isFinite
+          ? constraints.maxWidth
+          : MediaQuery.of(context).size.width;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: GestureDetector(
+          onTap: () => _openFullScreen(context, provider),
+          child: ConstrainedBox(
+            // Cap height so a very tall image doesn't dominate; width fills the card.
+            constraints: BoxConstraints(maxWidth: maxW, maxHeight: 420),
+            child: Image(
+              image: provider,
+              width: maxW,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              loadingBuilder: (ctx, child, progress) => progress == null
+                  ? child
+                  : const SizedBox(
+                      height: 120,
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  void _openFullScreen(BuildContext context, ImageProvider provider) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
+        body: Center(
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 5,
+            child: Image(image: provider, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    ));
   }
 }

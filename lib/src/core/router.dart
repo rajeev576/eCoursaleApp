@@ -11,6 +11,8 @@ import '../features/courses/comments_screen.dart';
 import '../features/courses/course_detail_screen.dart';
 import '../features/courses/quizzes_screen.dart';
 import '../features/courses/quiz_player_screen.dart';
+import '../features/courses/dpp_list_screen.dart';
+import '../features/courses/course_attachments_screen.dart';
 import '../features/courses/video_player_screen.dart';
 import '../features/courses/pdf_viewer_screen.dart';
 import '../features/forum/forum_screen.dart';
@@ -133,10 +135,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => QuizzesScreen(courseUuid: s.pathParameters['uuid']!),
       ),
       GoRoute(
+        path: '/course/:uuid/attachments',
+        builder: (_, s) => CourseAttachmentsScreen(courseUuid: s.pathParameters['uuid']!),
+      ),
+      GoRoute(
         path: '/quiz/:uuid/play',
         builder: (_, s) => QuizPlayerScreen(
           quizUuid: s.pathParameters['uuid']!,
           title: (s.extra as Map?)?['title'] as String? ?? 'Quiz',
+        ),
+      ),
+      GoRoute(
+        path: '/dpp',
+        builder: (_, __) => const DppListScreen(),
+      ),
+      GoRoute(
+        // Daily Practice runs in the SAME native quiz player (DPP mode).
+        path: '/dpp/:slug/play',
+        builder: (_, s) => QuizPlayerScreen(
+          dppSlug: s.pathParameters['slug']!,
+          title: (s.extra as Map?)?['title'] as String? ?? 'Daily Practice',
         ),
       ),
       GoRoute(

@@ -41,7 +41,7 @@ class CartScreen extends ConsumerWidget {
                 ),
                 title: Text(it.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text(it.type.replaceAll('_', ' '),
-                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -108,9 +108,9 @@ class CartScreen extends ConsumerWidget {
           ]),
           // Breakdown
           if (hasCoupon || hasCoins) ...[
-            _line('Subtotal', '₹${c.total}'),
-            if (hasCoupon) _line('Coupon (${c.couponCode})', '- ₹${c.couponDiscount}', green: true),
-            if (hasCoins) _line('Coins', '- ₹${c.coinsDiscount}', green: true),
+            _line(context, 'Subtotal', '₹${c.total}'),
+            if (hasCoupon) _line(context, 'Coupon (${c.couponCode})', '- ₹${c.couponDiscount}', green: true),
+            if (hasCoins) _line(context, 'Coins', '- ₹${c.coinsDiscount}', green: true),
           ],
           const SizedBox(height: 6),
           Row(children: [
@@ -120,7 +120,7 @@ class CartScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Payable (${c.count} item${c.count == 1 ? '' : 's'})',
-                      style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                   Text('₹${c.finalAmount}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                 ],
               ),
@@ -136,13 +136,16 @@ class CartScreen extends ConsumerWidget {
     );
   }
 
-  Widget _line(String label, String value, {bool green = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-          Text(value, style: TextStyle(fontSize: 12, color: green ? Colors.green : Colors.black87)),
-        ]),
-      );
+  Widget _line(BuildContext context, String label, String value, {bool green = false}) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+        Text(value, style: TextStyle(fontSize: 12, color: green ? Colors.green : cs.onSurface)),
+      ]),
+    );
+  }
 
   Future<void> _couponDialog(BuildContext context, WidgetRef ref, bool hasCoupon) async {
     final ctrl = TextEditingController();

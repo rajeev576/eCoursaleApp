@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import '../../core/providers.dart';
@@ -15,9 +16,13 @@ import '../tests/player_theme.dart';
 /// at a time, MCQ/MSQ/numeric/FIB, palette, and an inline result with per-question
 /// correctness + explanation. Light/dark follows the device; brand accent.
 class QuizPlayerScreen extends ConsumerStatefulWidget {
-  const QuizPlayerScreen({super.key, required this.quizUuid, this.title = 'Quiz'});
+  const QuizPlayerScreen({super.key, this.quizUuid = '', this.dppSlug, this.title = 'Quiz'});
+  /// Set for a normal lesson quiz; empty when running a Daily Practice ([dppSlug]).
   final String quizUuid;
+  /// Set to run a Daily Practice Problem set (free hook + premium cross-promo).
+  final String? dppSlug;
   final String title;
+  bool get isDpp => dppSlug != null && dppSlug!.isNotEmpty;
   @override
   ConsumerState<QuizPlayerScreen> createState() => _QuizPlayerScreenState();
 }
@@ -73,9 +78,18 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
     return h > 0 ? '${two(h)}:${two(m)}:${two(sec)}' : '${two(m)}:${two(sec)}';
   }
 
+  Map<String, dynamic> _promos = const {};
+
   Future<void> _load() async {
     try {
-      final quiz = await ref.read(contentRepoProvider).quizData(widget.quizUuid);
+      final QuizPaper quiz;
+      if (widget.isDpp) {
+        final r = await ref.read(contentRepoProvider).dppData(widget.dppSlug!);
+        quiz = r.paper;
+        _promos = r.promos;
+      } else {
+        quiz = await ref.read(contentRepoProvider).quizData(widget.quizUuid);
+      }
       for (final q in quiz.questions) {
         _answers[q.id] = _QAns();
       }
@@ -85,7 +99,7 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
         _lang = codes.contains('en') ? 'en' : (codes.isNotEmpty ? codes.first : 'en');
         _loading = false;
       });
-      _startTimer(); // no-op for untimed quizzes
+      _startTimer(); // no-op for untimed quizzes / DPP
     } catch (e) {
       setState(() {
         _error = apiErrorMessage(e, fallback: 'Could not load the quiz.');
@@ -142,9 +156,15 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
     setState(() => _submitted = true);
     // Record the attempt (best-effort — local score is the source of truth here).
     try {
-      await ref.read(contentRepoProvider).recordQuizAttempt(
-            widget.quizUuid, _score(), _quiz!.totalMarks,
-            DateTime.now().difference(_startedAt).inSeconds);
+      if (widget.isDpp) {
+        // DPP records correct-count / total-questions (web contract) + streak/coin.
+        await ref.read(contentRepoProvider)
+            .recordDppAttempt(widget.dppSlug!, _correctCount(), _qs.length);
+      } else {
+        await ref.read(contentRepoProvider).recordQuizAttempt(
+              widget.quizUuid, _score(), _quiz!.totalMarks,
+              DateTime.now().difference(_startedAt).inSeconds);
+      }
     } catch (_) {/* keep showing the result even if recording fails */}
   }
 
@@ -228,6 +248,9 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
                     style: TextStyle(color: p.textMuted, fontSize: 12)),
             ]),
           ),
+          // DPP: compact "unlock more" promo strip while practising (web parity —
+          // the attempt page surfaces featured premium content).
+          if (widget.isDpp) _promoStrip(p),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -307,29 +330,44 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
 
   Widget _bottomBar(PlayerPalette p, _QAns a) {
     final last = _index >= _qs.length - 1;
+    final outlined = OutlinedButton.styleFrom(
+      foregroundColor: p.text,
+      side: BorderSide(color: p.border),
+      padding: const EdgeInsets.symmetric(vertical: 13),
+    );
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         decoration: BoxDecoration(color: p.surface, border: Border(top: BorderSide(color: p.border))),
+        // Three equal-width buttons, same height/shape — Previous / Clear / Next|Submit.
         child: Row(children: [
-          IconButton(
-            onPressed: _index > 0 ? () => setState(() => _index--) : null,
-            icon: const Icon(Icons.chevron_left)),
-          TextButton(
-            onPressed: () => setState(() { a.value = null; a.answered = false; _fibCtrl.clear(); }),
-            child: const Text('Clear')),
-          const Spacer(),
-          if (last)
-            FilledButton(
-              onPressed: _submit,
-              style: FilledButton.styleFrom(backgroundColor: p.accent, foregroundColor: p.onAccent),
-              child: const Text('Submit'))
-          else
-            FilledButton(
-              onPressed: () => setState(() => _index++),
-              style: FilledButton.styleFrom(backgroundColor: p.accent, foregroundColor: p.onAccent),
-              child: const Text('Next')),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _index > 0 ? () => setState(() => _index--) : null,
+              style: outlined,
+              child: const Text('Previous', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => setState(() { a.value = null; a.answered = false; _fibCtrl.clear(); }),
+              style: outlined,
+              child: const Text('Clear', style: TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              onPressed: last ? _submit : () => setState(() => _index++),
+              style: FilledButton.styleFrom(
+                backgroundColor: p.accent, foregroundColor: p.onAccent,
+                padding: const EdgeInsets.symmetric(vertical: 13)),
+              child: Text(last ? 'Submit' : 'Next',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+          ),
         ]),
       ),
     );
@@ -362,16 +400,116 @@ class _QuizPlayerScreenState extends ConsumerState<QuizPlayerScreen> {
                 borderRadius: BorderRadius.circular(18),
               ),
               child: Column(children: [
-                Text('${_fmt(score)} / ${_fmt(total)}',
-                    style: TextStyle(color: p.onAccent, fontSize: 40, fontWeight: FontWeight.w800)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('${_fmt(score)} / ${_fmt(total)}',
+                      style: TextStyle(color: p.onAccent, fontSize: 40, fontWeight: FontWeight.w800)),
+                ),
                 Text('$correct of ${_qs.length} correct',
                     style: TextStyle(color: p.onAccent.withValues(alpha: 0.9))),
               ]),
             ),
             const SizedBox(height: 16),
+            // Cross-promotion (DPP only): nudge toward premium right after the
+            // result — featured courses / test series / bundles (+ PASS for the
+            // platform school). This is the whole point of the free DPP hook.
+            if (widget.isDpp) ..._promoSection(p),
             ..._qs.asMap().entries.map((e) => _solutionCard(p, e.key, e.value)),
           ],
         ),
+      ),
+    );
+  }
+
+  /// A thin horizontal strip of premium nudges shown on the DPP ATTEMPT screen.
+  Widget _promoStrip(PlayerPalette p) {
+    final courses = (_promos['courses'] as List?) ?? const [];
+    final series = (_promos['test_series'] as List?) ?? const [];
+    final bundles = (_promos['bundles'] as List?) ?? const [];
+    final isPlatform = _promos['is_platform'] == true;
+    final chips = <Widget>[];
+    Widget chip(IconData icon, String label, VoidCallback onTap) => Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ActionChip(
+            avatar: Icon(icon, size: 16, color: p.accent),
+            label: Text(label, style: const TextStyle(fontSize: 12)),
+            backgroundColor: p.accent.withValues(alpha: 0.08),
+            side: BorderSide(color: p.accent.withValues(alpha: 0.25)),
+            onPressed: onTap,
+          ),
+        );
+    if (isPlatform) chips.add(chip(Icons.workspace_premium_outlined, 'Get PASS', () => context.push('/pass')));
+    for (final c in courses.take(3)) {
+      chips.add(chip(Icons.play_circle_outline, (c['title'] ?? 'Course') as String,
+          () => context.push('/course/${c['uuid']}')));
+    }
+    for (final s in series.take(3)) {
+      chips.add(chip(Icons.assignment_outlined, (s['title'] ?? 'Test series') as String,
+          () => context.push('/test-series/${s['uuid']}')));
+    }
+    for (final b in bundles.take(2)) {
+      chips.add(chip(Icons.inventory_2_outlined, (b['title'] ?? 'Bundle') as String,
+          () => context.push('/bundle/${b['uuid']}')));
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Container(
+      color: p.surface,
+      padding: const EdgeInsets.only(left: 16, bottom: 8),
+      child: SizedBox(
+        height: 40,
+        child: ListView(scrollDirection: Axis.horizontal, children: chips),
+      ),
+    );
+  }
+
+  List<Widget> _promoSection(PlayerPalette p) {
+    final courses = (_promos['courses'] as List?) ?? const [];
+    final series = (_promos['test_series'] as List?) ?? const [];
+    final bundles = (_promos['bundles'] as List?) ?? const [];
+    final isPlatform = _promos['is_platform'] == true;
+    final hasAny = courses.isNotEmpty || series.isNotEmpty || bundles.isNotEmpty;
+    if (!hasAny && !isPlatform) return const [];
+    return [
+      const SizedBox(height: 4),
+      Text('Keep going — unlock more',
+          style: TextStyle(color: p.text, fontWeight: FontWeight.w800, fontSize: 16)),
+      const SizedBox(height: 10),
+      // PASS first for the platform school (the prime selling point).
+      if (isPlatform)
+        _promoTile(p, Icons.workspace_premium_outlined, 'Get the PASS',
+            'Unlock every exam with one subscription', () => context.push('/pass')),
+      for (final c in courses.take(4))
+        _promoTile(p, Icons.play_circle_outline, (c['title'] ?? '') as String,
+            'Course', () => context.push('/course/${c['uuid']}')),
+      for (final s in series.take(4))
+        _promoTile(p, Icons.assignment_outlined, (s['title'] ?? '') as String,
+            'Test series', () => context.push('/test-series/${s['uuid']}')),
+      for (final b in bundles.take(3))
+        _promoTile(p, Icons.inventory_2_outlined, (b['title'] ?? '') as String,
+            'Bundle', () => context.push('/bundle/${b['uuid']}')),
+      const SizedBox(height: 16),
+      Divider(color: p.border),
+      const SizedBox(height: 8),
+      Text('Solutions', style: TextStyle(color: p.text, fontWeight: FontWeight.w800, fontSize: 16)),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  Widget _promoTile(PlayerPalette p, IconData icon, String title, String tag, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: p.accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: p.accent.withValues(alpha: 0.2)),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: p.accent),
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: p.text, fontWeight: FontWeight.w600)),
+        subtitle: Text(tag, style: TextStyle(color: p.textMuted, fontSize: 12)),
+        trailing: Icon(Icons.chevron_right, color: p.accent),
+        onTap: onTap,
       ),
     );
   }

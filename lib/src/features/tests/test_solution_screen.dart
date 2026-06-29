@@ -230,14 +230,13 @@ class _QuestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Plain-text preview (not clipped raw HTML): some questions have empty
-    // leading lines / blank <p> tags, which made the clipped HTML preview look
-    // empty. stripHtml + trim guarantees the first real text shows. Math markers
-    // are kept as text; full rendering happens on the detail screen.
+    // Preview: render the question's RICH content (HTML + LaTeX) clipped to a
+    // couple of lines. We check the stripped text only to decide whether there's
+    // ANY content (else show a fallback label); the actual render uses the HTML
+    // so math shows properly instead of raw "$...$".
     final raw = q.lang(lang).question;
-    var preview = stripHtml(raw).replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (preview.length > 140) preview = '${preview.substring(0, 140)}…';
-    if (preview.isEmpty) preview = 'View question';
+    final plain = stripHtml(raw).replaceAll(RegExp(r'\s+'), ' ').trim();
+    final previewHtml = plain.isEmpty ? '<p>View question</p>' : raw;
     return Material(
       color: p.surface,
       borderRadius: BorderRadius.circular(14),
@@ -267,9 +266,20 @@ class _QuestionCard extends StatelessWidget {
                 Icon(Icons.chevron_right, size: 20, color: p.textFaint),
               ]),
               const SizedBox(height: 10),
-              Text(preview,
-                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 15, color: p.text, height: 1.35)),
+              // Render the preview as RICH content (HTML + LaTeX) clipped to ~2
+              // lines — NOT plain text, so math renders instead of showing raw
+              // "$...$". RichContent strips leading empty blocks, so cards that
+              // start with a blank <p> still show their real first line.
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 52),
+                    child: RichContent(html: previewHtml, fontSize: 15, color: p.text),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

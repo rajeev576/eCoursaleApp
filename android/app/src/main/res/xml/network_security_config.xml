@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  All app + video traffic is HTTPS, so cleartext stays OFF by default (secure).
+  This config exists mainly to keep WebView video playback (Bunny embed) reliable
+  in RELEASE builds and to trust the system CA store explicitly. If a school is
+  ever served over plain HTTP in dev, add its host under a cleartext domain-config.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

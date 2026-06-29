@@ -17,6 +17,7 @@ class SchoolConfig {
     this.twitterUrl = '',
     this.linkedinUrl = '',
     this.instagramUrl = '',
+    this.socialMedia = const [],
     this.googleClientId = '',
   });
 
@@ -36,6 +37,9 @@ class SchoolConfig {
   final String twitterUrl;
   final String linkedinUrl;
   final String instagramUrl;
+  // "Connect With Us" links from the web Community Hub (community_data.social_media).
+  // Each: {name, url, icon (FontAwesome class), color}. The richest source.
+  final List<SocialLink> socialMedia;
   // The school's OWN Google Web OAuth client id (BYOK). Empty → the app uses the
   // build's GOOGLE_SERVER_CLIENT_ID (the platform owner's client), so the
   // platform/MindSpan school works immediately with no admin config.
@@ -43,10 +47,25 @@ class SchoolConfig {
 
   bool feature(String key) => features[key] ?? false;
 
-  /// True if the school has at least one social/website link configured.
+  /// True if the school has any "Connect With Us" links. Prefers the rich
+  /// community_data list; falls back to the legacy individual URL fields.
   bool get hasSocialLinks =>
+      socialMedia.isNotEmpty ||
       websiteUrl.isNotEmpty || facebookUrl.isNotEmpty || twitterUrl.isNotEmpty ||
       linkedinUrl.isNotEmpty || instagramUrl.isNotEmpty;
+
+  /// The effective social links to render: the rich community_data list when
+  /// present, else built from the legacy individual URL fields.
+  List<SocialLink> get effectiveSocialLinks {
+    if (socialMedia.isNotEmpty) return socialMedia;
+    return [
+      if (instagramUrl.isNotEmpty) SocialLink(name: 'Instagram', url: instagramUrl, icon: 'fab fa-instagram'),
+      if (facebookUrl.isNotEmpty) SocialLink(name: 'Facebook', url: facebookUrl, icon: 'fab fa-facebook-f'),
+      if (twitterUrl.isNotEmpty) SocialLink(name: 'X', url: twitterUrl, icon: 'fab fa-twitter'),
+      if (linkedinUrl.isNotEmpty) SocialLink(name: 'LinkedIn', url: linkedinUrl, icon: 'fab fa-linkedin-in'),
+      if (websiteUrl.isNotEmpty) SocialLink(name: 'Website', url: websiteUrl, icon: 'fas fa-globe'),
+    ];
+  }
 
   factory SchoolConfig.fromJson(Map<String, dynamic> j) {
     final rawFeatures = (j['features'] as Map?) ?? {};
@@ -67,7 +86,28 @@ class SchoolConfig {
       twitterUrl: s('twitter_url'),
       linkedinUrl: s('linked_in_url'),
       instagramUrl: s('insta_url'),
+      socialMedia: ((j['social_media'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => SocialLink.fromJson(Map<String, dynamic>.from(e)))
+          .where((l) => l.url.isNotEmpty)
+          .toList(),
       googleClientId: s('google_oauth_client_id'),
     );
   }
+}
+
+/// One "Connect With Us" link (from community_data.social_media on the web).
+class SocialLink {
+  SocialLink({required this.name, required this.url, this.icon = '', this.color = ''});
+  final String name;
+  final String url;
+  final String icon;  // FontAwesome class from the web, e.g. 'fab fa-youtube'
+  final String color; // hex like '#FF0000'
+
+  factory SocialLink.fromJson(Map<String, dynamic> j) => SocialLink(
+        name: (j['name'] ?? '').toString(),
+        url: (j['url'] ?? '').toString().trim(),
+        icon: (j['icon'] ?? '').toString(),
+        color: (j['color'] ?? '').toString(),
+      );
 }

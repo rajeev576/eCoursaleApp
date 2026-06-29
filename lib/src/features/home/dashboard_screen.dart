@@ -8,6 +8,98 @@ import '../../core/widgets/price_text.dart';
 import '../../data/models/models.dart';
 import '../profile/profile_screen.dart' show meProvider;
 
+/// Free Daily Practice card on the home page — the latest DPP + the student's
+/// streak, with a "Practice now" CTA. Hidden when the school has no DPPs. The
+/// attempt result then cross-promotes premium content. Reuses the native quiz
+/// player in DPP mode.
+class _DailyPracticeCard extends ConsumerWidget {
+  const _DailyPracticeCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final dpp = ref.watch(dppListProvider);
+    return dpp.maybeWhen(
+      data: (d) {
+        final results = (d['results'] as List?) ?? const [];
+        if (results.isEmpty) return const SizedBox.shrink();
+        final latest = Map<String, dynamic>.from(results.first);
+        final streak = (d['streak'] ?? 0) as int;
+        final qCount = (latest['question_count'] ?? 0) as int;
+        final attempted = latest['attempted'] == true;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => context.push('/dpp/${latest['slug']}/play',
+                extra: {'title': latest['title']}),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [cs.primary, Color.alphaBlend(Colors.black.withValues(alpha: 0.18), cs.primary)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  const Icon(Icons.bolt, color: Colors.white, size: 20),
+                  const SizedBox(width: 6),
+                  const Text('Daily Practice',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                  const Spacer(),
+                  if (streak > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.local_fire_department, color: Colors.white, size: 15),
+                        const SizedBox(width: 3),
+                        Text('$streak-day streak',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                  const SizedBox(width: 6),
+                  // "See all" → the full Daily Practice list (all DPPs, like web).
+                  GestureDetector(
+                    onTap: () => context.push('/dpp'),
+                    child: const Text('See all',
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.underline, decorationColor: Colors.white)),
+                  ),
+                ]),
+                const SizedBox(height: 10),
+                Text((latest['title'] ?? '') as String,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text('$qCount question${qCount == 1 ? '' : 's'} · Free',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13)),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton(
+                    onPressed: () => context.push('/dpp/${latest['slug']}/play',
+                        extra: {'title': latest['title']}),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white, foregroundColor: cs.primary),
+                    child: Text(attempted ? 'Practice again' : 'Practice now',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
 /// The home / dashboard. White-label and PERSONAL: it greets the student, shows
 /// what's live, lets them continue their own courses, recalls their recent test
 /// activity, then surfaces featured content. Everything draws from the active
@@ -100,6 +192,9 @@ class DashboardScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (h.liveNow.isNotEmpty) _LiveNowCard(items: h.liveNow),
+                  // Free Daily Practice — top engagement hook (also cross-promotes
+                  // premium on the result screen).
+                  const _DailyPracticeCard(),
                   if (h.myCourses.isNotEmpty)
                     _CourseRail(
                       title: 'Continue learning',

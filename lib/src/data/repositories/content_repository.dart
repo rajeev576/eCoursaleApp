@@ -60,6 +60,16 @@ class ContentRepository {
     );
   }
 
+  /// ALL attachments across a course's lessons (so the student doesn't open each
+  /// lesson). Each item is an Attachment + its source lesson title.
+  Future<List<CourseAttachment>> courseAttachments(String uuid) async {
+    final res = await _client.raw.get('/courses/$uuid/attachments/');
+    final data = res.data as Map<String, dynamic>;
+    return ((data['attachments'] as List?) ?? [])
+        .map((e) => CourseAttachment.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
   Future<List<TestSeriesItem>> testSeries({int page = 1}) async {
     final res = await _client.raw.get('/test-series/', queryParameters: {'page': page});
     return _results(res.data).map((e) => TestSeriesItem.fromJson(e)).toList();
@@ -196,6 +206,43 @@ class ContentRepository {
       'marks_obtained': marks, 'total_marks': total,
       'percentage': pct, 'time_taken_seconds': timeSeconds,
     });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  // ── Daily Practice Problems (free hook + premium cross-promo) ──
+  /// Recent DPPs + the user's streak (page 1). {results, streak, has_more, total}.
+  Future<Map<String, dynamic>> dppList() async {
+    final res = await _client.raw.get('/dpp/');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// One page of DPPs (for the full "all daily practice" list, infinite scroll).
+  Future<({List<Map<String, dynamic>> items, bool hasMore, int streak})> dppPage(int page) async {
+    final res = await _client.raw.get('/dpp/', queryParameters: {'page': page});
+    final d = res.data as Map;
+    final list = (d['results'] as List?) ?? const [];
+    return (
+      items: list.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+      hasMore: (d['has_more'] ?? false) as bool,
+      streak: (d['streak'] ?? 0) as int,
+    );
+  }
+
+  /// A DPP's questions (quiz-shaped) + featured cross-promotion items. Returns the
+  /// QuizPaper (for the native player) and the raw promos map.
+  Future<({QuizPaper paper, Map<String, dynamic> promos})> dppData(String slug) async {
+    final res = await _client.raw.get('/dpp/$slug/data/');
+    final data = Map<String, dynamic>.from(res.data as Map);
+    return (
+      paper: QuizPaper.fromDpp(data),
+      promos: Map<String, dynamic>.from(data['promos'] ?? const {}),
+    );
+  }
+
+  /// Record a DPP attempt (streak + first-time coin). {coins_earned, streak}.
+  Future<Map<String, dynamic>> recordDppAttempt(String slug, int score, int total) async {
+    final res = await _client.raw.post('/dpp/$slug/attempt/',
+        data: {'score': score, 'total': total});
     return Map<String, dynamic>.from(res.data as Map);
   }
 
@@ -384,6 +431,18 @@ class CourseLessons {
   CourseLessons({required this.isEnrolled, required this.lessons});
   final bool isEnrolled;
   final List<Lesson> lessons;
+}
+
+/// An attachment surfaced at the COURSE level (with its source lesson title),
+/// for the course-wide attachments shortcut.
+class CourseAttachment {
+  CourseAttachment({required this.attachment, required this.lessonTitle});
+  final Attachment attachment;
+  final String lessonTitle;
+  factory CourseAttachment.fromJson(Map<String, dynamic> j) => CourseAttachment(
+        attachment: Attachment.fromJson(j),
+        lessonTitle: (j['lesson_title'] ?? '') as String,
+      );
 }
 
 class CourseQuizzes {

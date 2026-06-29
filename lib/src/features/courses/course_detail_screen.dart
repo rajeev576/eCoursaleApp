@@ -31,6 +31,12 @@ class CourseDetailScreen extends ConsumerWidget {
         title: const Text('Course'),
         actions: [
           IconButton(
+            tooltip: 'Attachments',
+            icon: const Icon(Icons.attach_file),
+            // All attachments across the course's lessons, in one list.
+            onPressed: () => context.push('/course/$uuid/attachments'),
+          ),
+          IconButton(
             tooltip: 'Quizzes',
             icon: const Icon(Icons.quiz_outlined),
             // NATIVE quizzes list for the course; each quiz opens the native player.

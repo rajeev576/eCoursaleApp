@@ -222,8 +222,11 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
       _snack('This section is locked.');
       return;
     }
-    if (_sectional && i < _secIndex) {
-      _snack('You can’t go back to a previous section.');
+    if (_sectional) {
+      // SECTIONAL-SUBMIT: you can't freely jump sections by tapping the tab.
+      // Forward only happens via "Submit Section" (which submits + locks the
+      // current one), and you can never return to a section once you leave it.
+      _snack('Use "Submit Section" to move to the next section.');
       return;
     }
     // Leaving a lock-on-exit section → lock it.
@@ -241,6 +244,8 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
 
   /// Submit the current section and advance to the next (sectional-submit mode).
   Future<void> _submitSection({bool auto = false}) async {
+    if (_submitting) return; // guard: a second tap mustn't submit twice (was
+                             // locking an extra section while the save was in flight)
     if (!auto) {
       final ok = await showTestSummaryDialog(
         context: context,
@@ -254,17 +259,19 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
       );
       if (ok != true) return;
     }
+    setState(() => _submitting = true); // shows the spinner on the Submit-Section button
     await _save();
     _submittedSections.add(_secIndex);
     final next = _secIndex + 1;
     if (next >= _sections.length) {
-      _submit(auto: true); // was the last section → finish the test
+      await _submit(auto: true); // was the last section → finish the test
       return;
     }
     setState(() {
       _secIndex = next;
       _qIndex = 0;
       _remaining = _sections[next].timeSeconds; // next section's own timer
+      _submitting = false;
     });
     _markSeen();
   }
@@ -545,7 +552,12 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
                       SingleChildScrollView(
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    // Key the content to the CURRENT question (section + index) so
+                    // Flutter rebuilds it fresh on every question/section change and
+                    // never reuses an option tile's element from a prior question
+                    // (which could otherwise show stale/duplicated selection state).
                     child: Column(
+                      key: ValueKey('q_${_secIndex}_${_qIndex}_${q.uuid}'),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Shared passage / case-study (4–5 questions reference one).
@@ -881,10 +893,13 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
         const SizedBox(width: 10),
         Container(width: 1, height: 18, color: p.border),
         const SizedBox(width: 10),
-        if (q.marks.isNotEmpty) _markChip(p, '+ ${q.marks}', positive: true),
+        if (q.marks.isNotEmpty)
+          // Strip any sign the source already carries (e.g. "+2") so the chip's
+          // own "+ " prefix isn't doubled into "++2".
+          _markChip(p, '+ ${q.marks.replaceAll(RegExp(r'^[+\s]+'), '')}', positive: true),
         if (q.penalty.isNotEmpty) ...[
           const SizedBox(width: 6),
-          _markChip(p, '- ${q.penalty.replaceAll('-', '')}', positive: false),
+          _markChip(p, '- ${q.penalty.replaceAll(RegExp(r'^[-\s]+'), '')}', positive: false),
         ],
         const Spacer(),
         // mark for review (star) — wired to the answer state
@@ -920,9 +935,15 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
   // ── option tile (Testbook bordered style) ──
   Widget _optionTile(PlayerPalette p, TestQuestion q, _AnswerState a, TestOption opt, int idx,
       {bool isSkipOption = false}) {
+    // CRITICAL: when options have empty/duplicate `sl_no`, comparing a.value to
+    // opt.slNo makes EVERY option match (e.g. '' == '') → "select one selects
+    // all". Identify each option by its sl_no when present, else its 1-based
+    // POSITION (which is also what the backend scorer uses). This is unique
+    // per option within a question.
+    final optKey = opt.slNo.isNotEmpty ? opt.slNo : '${idx + 1}';
     final selected = q.isMulti
-        ? (a.value is List && (a.value as List).contains(opt.slNo))
-        : a.value == opt.slNo;
+        ? (a.value is List && (a.value as List).contains(optKey))
+        : a.value == optKey;
     final label = opt.slNo.isNotEmpty ? opt.slNo : '${idx + 1}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -936,7 +957,7 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
               if (isSkipOption) {
                 // Explicit "Not Attempted": single-select the skip option, clear
                 // any real answer, and flag isSkip for the backend scorer.
-                a.value = opt.slNo;
+                a.value = optKey;
                 a.answered = true;
                 a.isSkip = true;
                 return;
@@ -945,15 +966,15 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
               a.isSkip = false;
               if (q.isMulti) {
                 final list = (a.value is List) ? List<String>.from(a.value) : <String>[];
-                if (list.contains(opt.slNo)) {
-                  list.remove(opt.slNo);
+                if (list.contains(optKey)) {
+                  list.remove(optKey);
                 } else {
-                  list.add(opt.slNo);
+                  list.add(optKey);
                 }
                 a.value = list;
                 a.answered = list.isNotEmpty;
               } else {
-                a.value = opt.slNo;
+                a.value = optKey;
                 a.answered = true;
               }
             });
@@ -1008,7 +1029,11 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
   // ── bottom action bar: Mark & Next · Clear · Save & Next ──
   Widget _bottomBar(PlayerPalette p, _AnswerState a) {
     final isLastInSection = _qIndex >= _qs.length - 1;
-    final lastOverall = isLastInSection && (!_sectional || _isLastSection);
+    // The whole test ends only at the LAST question of the LAST section. The last
+    // question of a NON-final section advances to the next section — for a
+    // sectional-submit test that goes through Submit-Section; otherwise it just
+    // moves to the next section silently.
+    final lastOverall = isLastInSection && _isLastSection;
     return SafeArea(
       top: false,
       child: Container(
@@ -1054,11 +1079,13 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
                   ? null
                   : () {
                       if (lastOverall) {
-                        _submit();
+                        _submit();                 // last ques of last section → finish
                       } else if (isLastInSection && _sectional) {
-                        _submitSection();
+                        _submitSection();          // sectional: submit & advance
+                      } else if (isLastInSection) {
+                        _advanceToNextSection();    // non-sectional: just go to next section
                       } else {
-                        _saveAndNext();
+                        _saveAndNext();             // normal next question
                       }
                     },
               style: FilledButton.styleFrom(
@@ -1066,14 +1093,16 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
                 foregroundColor: p.onAccent,
                 padding: const EdgeInsets.symmetric(vertical: 13),
               ),
-              child: _submitting && lastOverall
+              child: _submitting
                   ? SizedBox(
                       height: 18, width: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: p.onAccent))
                   : Text(
                       lastOverall
                           ? 'Submit'
-                          : (isLastInSection && _sectional ? 'Submit Section' : 'Save & Next'),
+                          : (isLastInSection && _sectional
+                              ? 'Submit Section'
+                              : (isLastInSection ? 'Next Section' : 'Save & Next')),
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
             ),
           ),
@@ -1107,5 +1136,22 @@ class _TestPlayerScreenState extends ConsumerState<TestPlayerScreen> {
       _markSeen();
       _scrollToTop();
     }
+  }
+
+  /// Non-sectional multi-section test: at the last question of a non-final
+  /// section, move to the NEXT section's first question (no submit, no dialog).
+  void _advanceToNextSection() {
+    _maybeWarnMandatory();
+    _save();
+    final next = _secIndex + 1;
+    if (next >= _sections.length) return; // shouldn't happen (lastOverall handles it)
+    // Respect lock-on-exit if the leaving section has it.
+    if (_section.lockOnExit) _lockedSections.add(_secIndex);
+    setState(() {
+      _secIndex = next;
+      _qIndex = 0;
+    });
+    _markSeen();
+    _scrollToTop();
   }
 }

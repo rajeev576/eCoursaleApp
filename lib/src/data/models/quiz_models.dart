@@ -155,4 +155,41 @@ class QuizPaper {
           : int.tryParse('${data['duration_minutes'] ?? ''}') ?? 0,
     );
   }
+
+  /// Build from a Daily-Practice payload. DPP questions are FLATTER than a quiz
+  /// (questionText/options/explanation at the top level, single language), so we
+  /// adapt each into the quiz model's single-'en' shape. Reuses the native quiz
+  /// player verbatim (same scoring + result + explanation rendering).
+  factory QuizPaper.fromDpp(Map<String, dynamic> data) {
+    final qs = <QuizQuestion>[];
+    int i = 1;
+    for (final raw in (data['questions'] as List?) ?? []) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      final opts = ((j['options'] as List?) ?? [])
+          .map((e) => QuizOption.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      qs.add(QuizQuestion(
+        id: (j['id'] is int) ? j['id'] as int : i,
+        type: (j['questionType'] ?? 'MCQ').toString(),
+        answerType: (j['answerType'] ?? 'single').toString(),
+        marks: QuizQuestion._num(j['marks']),
+        penalty: QuizQuestion._num(j['penalty']),
+        correctAnswer: j['correctAnswer'],
+        langs: {
+          'en': QuizLang(
+            question: (j['questionText'] ?? '').toString(),
+            options: opts,
+            explanation: (j['explanation'] ?? '').toString(),
+          ),
+        },
+      ));
+      i++;
+    }
+    return QuizPaper(
+      title: (data['title'] ?? 'Daily Practice').toString(),
+      questions: qs,
+      languages: const {},
+      durationMinutes: 0, // DPP is untimed
+    );
+  }
 }

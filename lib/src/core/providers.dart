@@ -47,6 +47,10 @@ final forumProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 final complaintsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>(
     (ref) => ref.watch(contentRepoProvider).complaints());
 
+/// Daily Practice list + streak for the home card. Session-cached (small list).
+final dppListProvider = FutureProvider<Map<String, dynamic>>(
+    (ref) => ref.watch(contentRepoProvider).dppList());
+
 final forumDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>(
     (ref, uuid) => ref.watch(contentRepoProvider).forumDetail(uuid));
 
@@ -81,6 +85,10 @@ final courseLessonsProvider =
 final courseQuizzesProvider =
     FutureProvider.autoDispose.family<CourseQuizzes, String>(
         (ref, uuid) => ref.watch(contentRepoProvider).courseQuizzes(uuid));
+
+final courseAttachmentsProvider =
+    FutureProvider.autoDispose.family<List<CourseAttachment>, String>(
+        (ref, uuid) => ref.watch(contentRepoProvider).courseAttachments(uuid));
 
 final courseDetailProvider =
     FutureProvider.autoDispose.family<Course, String>(

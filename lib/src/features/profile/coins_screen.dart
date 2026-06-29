@@ -23,11 +23,12 @@ class CoinsScreen extends ConsumerWidget {
         ),
         data: (data) {
           if (data['enabled'] != true) {
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: const EdgeInsets.all(32),
                 child: Text('Coins are not available on this plan.',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ),
             );
           }
@@ -93,9 +94,10 @@ class CoinsScreen extends ConsumerWidget {
                 const Text('History', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 const SizedBox(height: 8),
                 if (txns.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No transactions yet.', style: TextStyle(color: Colors.black54)),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('No transactions yet.',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   )
                 else
                   ...txns.map((t) {

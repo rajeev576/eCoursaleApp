@@ -83,7 +83,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
               _field(_address, 'Address', Icons.home_outlined, maxLines: 2),
               const SizedBox(height: 12),
               if (u != null)
-                Text('Email: ${u.email}', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                Text('Email: ${u.email}', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _save,

@@ -169,7 +169,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         Text('Verify your phone',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
-        Text('We sent a code to ${_phone.text.trim()}', style: const TextStyle(color: Colors.black54)),
+        Text('We sent a code to ${_phone.text.trim()}',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 18),
         _field(_otp, 'Enter OTP', Icons.sms_outlined, keyboard: TextInputType.number),
         if (_error != null) ...[
